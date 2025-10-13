@@ -1,5 +1,19 @@
 """Configuration module for audio reprompt project."""
 
+from .manager import (
+  ConfigurationError,
+)
+
+from .types import (
+  Config,
+  DataConfig,
+  ModelConfig,
+  TrainingConfig,
+  InferenceConfig,
+  LoggingConfig,
+  EnvironmentConfig,
+)
+
 from .config import (
     load_config,
     reload_config,
@@ -11,15 +25,7 @@ from .config import (
     get_environment_config,
     get_config_value,
     setup_project_paths,
-    get_raw_config,
-    Config,
-    DataConfig,
-    ModelConfig,
-    TrainingConfig,
-    InferenceConfig,
-    LoggingConfig,
-    EnvironmentConfig,
-    ConfigurationError,
+    get_raw_config, 
 )
 
 __all__ = [
