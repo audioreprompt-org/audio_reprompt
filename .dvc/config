@@ -2,4 +2,4 @@
     remote = s3
     autostage = true
 ['remote "s3"']
-    url = s3://maia-music-reprompt-bucket/training
+    url = s3://maia-music-reprompt/training
