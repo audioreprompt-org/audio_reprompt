@@ -6,12 +6,11 @@ from a YAML file located at the repository root.
 """
 
 import os
-import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
 from config.manager import ConfigManager
 from config.types import Config, DataConfig, EnvironmentConfig, InferenceConfig, LoggingConfig, ModelConfig, TrainingConfig 
-
+from config import PROJECT_ROOT
 
 # Global config manager instance
 _config_manager = ConfigManager()
@@ -128,6 +127,10 @@ def setup_project_paths():
         config.data.cleaned_data_path,
         config.data.train_data_path,
         config.data.tracks_data_path,
+        config.data.data_docs_path,
+        config.data.data_prompts_path,
+        config.data.data_clap_path,
+        config.model.model_musicgen_path,
         config.training.checkpoint_dir,
         config.training.log_dir,
         config.inference.output_dir,
@@ -136,6 +139,6 @@ def setup_project_paths():
     
     for path in paths_to_create:
         if path:
-            Path(path).mkdir(parents=True, exist_ok=True)
+            Path(PROJECT_ROOT / path).mkdir(parents=True, exist_ok=True)
     
     return config
