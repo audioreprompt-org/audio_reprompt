@@ -271,24 +271,24 @@ def compute_clap_scores(results, device=None):
 
 config = load_config()
 
-DATA_DOCS_PATH = config["DATA_DOCS_PATH"]
-DATA_CSV_PATH = config["DATA_CSV_PATH"]
-MODEL_MUSICGEN_PATH = config["MODEL_MUSICGEN_PATH"]
-DATA_GENERATED_PATH = config["DATA_GENERATED_PATH"]
-DATA_CLAP_PATH = config["DATA_CLAP_PATH"]
+data_docs_path = config["data_docs_path"]
+data_prompts_path = config["data_prompts_path"]
+model_musicgen_path = config["model_musicgen_path"]
+tracks_data_path = config["tracks_data_path"]
+data_clap_path = config["data_clap_path"]
 
 
 # Pipeline.
 if __name__ == "__main__":
-    dataset = LoadSpanioDataset(DATA_DOCS_PATH)
+    dataset = LoadSpanioDataset(data_docs_path)
 
     synthesiser = pipeline(
-        "text-to-audio", model=MODEL_MUSICGEN_PATH, device=-1, trust_remote_code=True
+        "text-to-audio", model=model_musicgen_path, device=-1, trust_remote_code=True
     )
 
     results = generate_music_from_prompts(synthesiser, dataset)
     scored_results = compute_clap_scores(results)
 
     df = pd.DataFrame(scored_results)
-    df.to_csv(DATA_CLAP_PATH, index=False)
+    df.to_csv(data_clap_path, index=False)
     print("\nPipeline completo: resultados guardados en csv")

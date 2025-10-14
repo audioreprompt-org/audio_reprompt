@@ -7,13 +7,18 @@ data:
   cleaned_data_path: "data/cleaned"
   train_data_path: "data/train"
   tracks_data_path: "data/tracks"
+  data_docs_path: "data/docs/descriptions.json"
+  data_prompts_path: "data/prompts/spanio_prompts.csv"
+  tracks_data_path: "data/tracks/generated_music"
+  data_clap_path: "data/results_with_clap.csv"
   batch_size: 32
   max_audio_length: 30  # seconds
-  sample_rate: 16000
+  sample_rate: 32000
 
 # Model configuration
 model:
   name: "transformer-audio-model"
+  model_musicgen_path: "models/tasty-musicgen-small"
   max_sequence_length: 512
   hidden_size: 768
   num_attention_heads: 12

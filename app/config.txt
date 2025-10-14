@@ -1,0 +1,7 @@
+# Data.
+
+data_docs_path: "../data/descriptions.json"
+data_prompts_path: "../data/spanio_prompts.csv"
+tracks_data_path: "../data/generated_music"
+data_clap_path: "../data/results_with_clap.csv"
+model_musicgen_path: "../models/tasty-musicgen-small"
