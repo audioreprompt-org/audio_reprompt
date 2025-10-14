@@ -1,6 +1,6 @@
 outs:
-- md5: d751713988987e9331980363e24189ce.dir
-  size: 0
-  nfiles: 0
+- md5: 037336a11854765fe2bf5a6ca4de7592.dir
+  size: 11918
+  nfiles: 1
   hash: md5
   path: prompts
