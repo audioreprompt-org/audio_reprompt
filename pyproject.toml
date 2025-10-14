@@ -8,7 +8,17 @@ dependencies = [
     "pandas>=2.3.3",
     "scikit-learn>=1.7.2",
     "transformers>=4.57.0",
+    "pyyaml>=6.0",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["config*", "models*", "app*"]
+exclude = ["tests*"]
 
 [dependency-groups]
 dev = [

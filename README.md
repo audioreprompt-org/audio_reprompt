@@ -47,6 +47,13 @@ desde el terminal usando pip.
 pip install torch torchaudio
 ```
 
+## Módulo de Configuración
+
+Este módulo de configuración que carga configuraciones desde un archivo YAML ubicado en la raíz del repositorio (`config.yaml`). El módulo de configuración proporciona acceso con seguridad de tipos a todas las configuraciones del proyecto para su uso en notebooks de Python y scripts.
+
+Para más información haga clic [aquí](https://github.com/audioreprompt-org/audio_reprompt/wiki/Configuraci%C3%B3n#uso-b%C3%A1sico)
+
+
 ## Licencia
 
 MIT
