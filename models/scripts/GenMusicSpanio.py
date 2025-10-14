@@ -1,34 +1,33 @@
-import yaml
 import csv
 import os
 import pandas as pd
 import json
 
-import scipy.io.wavfile
 import torch
 import torchaudio
-
+import scipy.io.wavfile
 from laion_clap import CLAP_Module
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from transformers import pipeline
 from tqdm import tqdm
+from dataclasses import dataclass, field
+from config import load_config, setup_project_paths, PROJECT_ROOT
 
+# Tipos
+@dataclass
+class MusicGenData:
+    """Estructura de datos para resultados de generación musical."""
+    id: str
+    instrument: str
+    description: str
+    audio_path: str
 
-def load_config(path="config.yaml"):
-    """
-    Carga un archivo de configuración en formato YAML.
-
-    Parameters:
-        path (str): Ruta al archivo YAML de configuración. Por defecto es "config.yaml".
-
-    Returns:
-        dict: Diccionario con la configuración cargada desde el archivo YAML.
-    """
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
-
+@dataclass
+class MusicGenCLAPResult(MusicGenData):
+    """Extiende MusicGenData para incluir el CLAP Score."""
+    clap_score: float
 
 class LoadSpanioDataset(Dataset):
     """
@@ -142,7 +141,7 @@ class LoadSpanioDataset(Dataset):
 
 def generate_music_from_prompts(
     synthesiser, dataset, output_dir="generated_music", sample_rate=32000
-):
+) -> list[MusicGenData]:
     """
     Genera archivos de audio a partir de descripciones de texto usando el modelo tasty-musicgen-small.
 
@@ -156,7 +155,7 @@ def generate_music_from_prompts(
         list[dict]: Lista con {'id', 'instrument', 'description', 'audio_path'} por cada generación.
     """
     os.makedirs(output_dir, exist_ok=True)
-    results = []
+    results: list[MusicGenData] = []
 
     print(f"Generando música para {len(dataset)} prompts...\n")
 
@@ -182,14 +181,12 @@ def generate_music_from_prompts(
             )  # Escribir el archivo .wav con la señal y la frecuencia.
 
             # 4. Registrar los resultados.
-            results.append(
-                {
-                    "id": file_id,
-                    "instrument": record["instrument"],
-                    "description": text_prompt,
-                    "audio_path": output_path,
-                }
-            )
+            results.append(MusicGenData(
+                id=file_id,
+                instrument=record["instrument"],
+                description=text_prompt,
+                audio_path=output_path,
+            ))
         except Exception as e:
             print(f" Error generando {file_id}: {e}")
             continue
@@ -198,7 +195,7 @@ def generate_music_from_prompts(
     return results
 
 
-def compute_clap_scores(results, device=None):
+def compute_clap_scores(results: list[MusicGenData], device=None) -> list[MusicGenCLAPResult]:
     """
     Calcula el CLAP Score (similaridad texto-audio) usando embeddings del modelo CLAP.
 
@@ -223,14 +220,14 @@ def compute_clap_scores(results, device=None):
 
     print("Modelo CLAP cargado correctamente.\nCalculando CLAP Scores...\n")
 
-    scored = []
+    scored: list[MusicGenCLAPResult] = []
 
     # 3. Iterar sobre los resultados.
     for r in tqdm(results, desc="Procesando audios", ncols=80):
         # 4. Carga y preprocesamiento del audio.
         try:
             audio, sr = torchaudio.load(
-                r["audio_path"]
+                r.audio_path
             )  # Carga el audio en un tensor y su frecuencia de muestreo.
             if sr != 48000:
                 audio = torchaudio.functional.resample(
@@ -244,7 +241,7 @@ def compute_clap_scores(results, device=None):
                     audio, use_tensor=True
                 )
                 text_emb = clap_model.get_text_embedding(
-                    [r["description"]], use_tensor=True
+                    [r.description], use_tensor=True
                 )
 
                 # 6. Normalización y cálculo de similitud.
@@ -257,25 +254,37 @@ def compute_clap_scores(results, device=None):
                 ).item()
 
             # 7. Guardar el resultado.
-            r["clap_score"] = round(float(score), 6)
-            scored.append(r)
+            clap_score = round(float(score), 6)
+            scored.append(MusicGenCLAPResult(
+                id=r.id,
+                instrument=r.instrument,
+                description=r.description,
+                audio_path=r.audio_path,
+                clap_score=clap_score,
+            ))
 
         except Exception as e:
             print(
-                f"Error calculando CLAP para {r.get('id', '?')} ({r['audio_path']}): {e}"
+                f"Error calculando CLAP para {r.id} ({r.audio_path}): {e}"
             )
     return scored
 
 
 # Variables y constantes.
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Dispositivo: {DEVICE}")
 
+print("Configurando las rutas del proyecto...")
+setup_project_paths()
+
+print("Cargando configuración...")
 config = load_config()
 
-data_docs_path = config["data_docs_path"]
-data_prompts_path = config["data_prompts_path"]
-model_musicgen_path = config["model_musicgen_path"]
-tracks_data_path = config["tracks_data_path"]
-data_clap_path = config["data_clap_path"]
+data_docs_path = PROJECT_ROOT / config.data.data_docs_path / 'descriptions.json'
+data_prompts_path = PROJECT_ROOT / config.data.data_prompts_path / 'spanio_prompts.csv'
+model_musicgen_path = PROJECT_ROOT / config.model.model_musicgen_path
+tracks_data_path = PROJECT_ROOT / config.data.tracks_data_path
+data_clap_path = PROJECT_ROOT / config.data.data_clap_path / 'results_with_clap.csv'
 
 
 # Pipeline.
@@ -283,7 +292,7 @@ if __name__ == "__main__":
     dataset = LoadSpanioDataset(data_docs_path)
 
     synthesiser = pipeline(
-        "text-to-audio", model=model_musicgen_path, device=-1, trust_remote_code=True
+        "text-to-audio", model=model_musicgen_path, device=DEVICE, trust_remote_code=True
     )
 
     results = generate_music_from_prompts(synthesiser, dataset)
