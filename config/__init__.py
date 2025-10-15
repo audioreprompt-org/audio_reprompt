@@ -1,5 +1,9 @@
 """Configuration module for audio reprompt project."""
 
+# Define the project root directory
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 from .manager import (
   ConfigurationError,
 )

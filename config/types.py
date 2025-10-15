@@ -9,6 +9,9 @@ class DataConfig:
     cleaned_data_path: str
     train_data_path: str
     tracks_data_path: str
+    data_docs_path: str
+    data_prompts_path: str
+    data_clap_path: str
     batch_size: int
     max_audio_length: int
     sample_rate: int
@@ -18,6 +21,7 @@ class DataConfig:
 class ModelConfig:
     """Model configuration settings."""
     name: str
+    model_musicgen_path: str
     max_sequence_length: int
     hidden_size: int
     num_attention_heads: int
