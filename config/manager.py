@@ -1,7 +1,10 @@
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
-from config.types import Config, DataConfig, EnvironmentConfig, InferenceConfig, LoggingConfig, ModelConfig, TrainingConfig
+from config.types import (
+    Config, DataConfig, EnvironmentConfig, InferenceConfig, LoggingConfig,
+    ModelConfig, TrainingConfig, EvaluationConfig,
+)
 
 
 class ConfigurationError(Exception):
@@ -67,7 +70,12 @@ class ConfigManager:
             inference_config = InferenceConfig(**config_data.get('inference', {}))
             logging_config = LoggingConfig(**config_data.get('logging', {}))
             environment_config = EnvironmentConfig(**config_data.get('environment', {}))
-            
+            # Evaluation dataclasses
+            eval_dict = config_data.get('evaluation', {}) or {}
+            evaluation_config = EvaluationConfig(
+                metrics=eval_dict.get('metrics', {}) or {}
+            )
+
             return Config(
                 data=data_config,
                 model=model_config,
@@ -75,6 +83,7 @@ class ConfigManager:
                 inference=inference_config,
                 logging=logging_config,
                 environment=environment_config,
+                evaluation=evaluation_config,
                 _raw_config=config_data
             )
         except TypeError as e:

@@ -57,3 +57,9 @@ environment:
   device: "auto"  # auto, cpu, cuda, mps
   num_workers: 4
   pin_memory: true
+
+# Evaluation configuration
+evaluation:
+  metrics:
+    clap:
+      output_csv_name: "results_with_clap.csv"

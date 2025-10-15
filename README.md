@@ -47,12 +47,41 @@ desde el terminal usando pip.
 pip install torch torchaudio
 ```
 
+5. Luego de instalar las dependencias, probablemente sea necesario cargar los datos que están en DVC, esto se hace
+usando UV
+
+```bash
+uv run dvc pull 
+```
+
+6. Para usar jupyter
+
+```bash
+uv run --locked --with jupyter python -m notebook
+```
+
 ## Módulo de Configuración
 
 Este módulo de configuración que carga configuraciones desde un archivo YAML ubicado en la raíz del repositorio (`config.yaml`). El módulo de configuración proporciona acceso con seguridad de tipos a todas las configuraciones del proyecto para su uso en notebooks de Python y scripts.
 
 Para más información haga clic [aquí](https://github.com/audioreprompt-org/audio_reprompt/wiki/Configuraci%C3%B3n#uso-b%C3%A1sico)
 
+## Métricas
+
+- **CLAP (texto–audio)** ✅ Implementada. Calcula la similitud coseno entre el embedding del audio y el del prompt.
+- **FAD** ⏸️ No implementada en esta fase.
+- **Aesthetics** ⏸️ No implementada en esta fase.
+
+### Cómo correr la evaluación
+
+```bash
+uv run -m models.scripts.evaluate
+```
+
+Esto:
+- Lee la configuración desde config.yaml.
+- Busca los prompts y empareja los audios por id.
+- Ejecuta las métricas activas y deja los resultados en `data/scores/`
 
 ## Licencia
 

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
 
 # Configuration data classes for type safety and auto-completion
 @dataclass
@@ -72,6 +73,11 @@ class EnvironmentConfig:
 
 
 @dataclass
+class EvaluationConfig:
+    metrics: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+
+@dataclass
 class Config:
     """Main configuration container."""
     data: DataConfig
@@ -80,4 +86,5 @@ class Config:
     inference: InferenceConfig
     logging: LoggingConfig
     environment: EnvironmentConfig
+    evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     _raw_config: Dict[str, Any] = field(default_factory=dict, repr=False)
