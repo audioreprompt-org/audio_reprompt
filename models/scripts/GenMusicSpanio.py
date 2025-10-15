@@ -295,7 +295,7 @@ if __name__ == "__main__":
         "text-to-audio", model=model_musicgen_path, device=DEVICE, trust_remote_code=True
     )
 
-    results = generate_music_from_prompts(synthesiser, dataset, model_musicgen_path)
+    results = generate_music_from_prompts(synthesiser, dataset, tracks_data_path)
     scored_results = compute_clap_scores(results)
 
     df = pd.DataFrame(scored_results)
