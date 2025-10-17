@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from config.manager import ConfigManager
-from config.types import Config, DataConfig, EnvironmentConfig, InferenceConfig, LoggingConfig, ModelConfig, \
+from config.typedefs import Config, DataConfig, EnvironmentConfig, InferenceConfig, LoggingConfig, ModelConfig, \
     TrainingConfig, EvaluationConfig
 from config import PROJECT_ROOT
 

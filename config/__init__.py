@@ -4,11 +4,11 @@
 from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-from .manager import (
+from config.manager import (
   ConfigurationError,
 )
 
-from .types import (
+from config.typedefs import (
   Config,
   DataConfig,
   ModelConfig,
@@ -20,7 +20,7 @@ from .types import (
 )
 
 
-from .config import (
+from config.config import (
     load_config,
     reload_config,
     get_data_config,

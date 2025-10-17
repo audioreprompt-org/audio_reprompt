@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 # Configuration data classes for type safety and auto-completion
@@ -74,7 +74,7 @@ class EnvironmentConfig:
 
 @dataclass
 class EvaluationConfig:
-    metrics: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    metrics: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
@@ -87,4 +87,4 @@ class Config:
     logging: LoggingConfig
     environment: EnvironmentConfig
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
-    _raw_config: Dict[str, Any] = field(default_factory=dict, repr=False)
+    _raw_config: dict[str, Any] = field(default_factory=dict, repr=False)

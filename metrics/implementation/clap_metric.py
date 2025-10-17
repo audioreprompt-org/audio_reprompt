@@ -29,7 +29,7 @@ class CLAPMetric(Metric):
             for it in audio_items
         ]
 
-        scored = clap_lib.score(items, device=device)
+        scored = clap_lib.calculate_scores(items, device=device)
 
         # Persist CSV (flat, DVC-friendly)
         out_csv = scores_dir / out_csv_name
@@ -38,12 +38,12 @@ class CLAPMetric(Metric):
             w = csv.writer(f)
             w.writerow(["id", "instrument", "description", "audio_path", "clap_score"])
             for s in scored:
-                w.writerow([s.id, s.instrument, s.description, s.audio_path, f"{s.clap_score:.6f}"])
+                w.writerow([s.item.id, s.item.instrument, s.item.description, s.item.audio_path, f"{s.clap_score:.6f}"])
 
         # Simple stats by flavor
         by_flavor = {}
         for s in scored:
-            by_flavor.setdefault(s.instrument or "unknown", []).append(s.clap_score)
+            by_flavor.setdefault(s.item.instrument or "unknown", []).append(s.clap_score)
         per_flavor = {
             k: {"mean": float(np.mean(v)), "std": float(np.std(v)), "n": int(len(v))}
             for k, v in by_flavor.items()

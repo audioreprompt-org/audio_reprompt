@@ -1,4 +1,4 @@
-from evaluation.engine import run_from_config
+from evaluation.scorer import run_from_config
 
 if __name__ == "__main__":
     out = run_from_config()
