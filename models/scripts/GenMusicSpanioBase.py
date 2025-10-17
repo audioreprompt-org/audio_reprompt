@@ -20,7 +20,7 @@ base_prompts = [
     "salty music, ambient for fine restaurant",
 ]
 
-variations_per_prompt = 2
+variations_per_prompt = 25
 
 
 def generate_music_from_prompts(
@@ -47,7 +47,7 @@ def generate_music_from_prompts(
     for taste_prompt in base_prompts:
         taste_name = taste_prompt.split()[0]
         print(f"Sabor: {taste_name}")
-        for i in range(variations_per_prompt):
+        for i in tqdm(range(variations_per_prompt), desc="Generando variaciones", ncols=80):
             seed = random.randint(0, 9999)
             file_id = f"{taste_name}_{i+1:02d}"
             output_path = os.path.join(output_dir, f"{file_id}.wav")
