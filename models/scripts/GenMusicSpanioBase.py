@@ -1,20 +1,17 @@
-import csv
 import os
 import pandas as pd
-import json
 import random
 
 import torch
 import torchaudio
 import scipy.io.wavfile
 from laion_clap import CLAP_Module
-from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from transformers import pipeline
 from tqdm import tqdm
-from dataclasses import dataclass, field
 from config import load_config, setup_project_paths, PROJECT_ROOT
+from models.scripts.types import MusicGenCLAPResult, MusicGenData
 
 base_prompts = [
     "sweet music, ambient for fine restaurant",
@@ -24,24 +21,6 @@ base_prompts = [
 ]
 
 variations_per_prompt = 2
-
-
-# Tipos
-@dataclass
-class MusicGenData:
-    """Estructura de datos para resultados de generación musical."""
-
-    id: str
-    instrument: str
-    description: str
-    audio_path: str
-
-
-@dataclass
-class MusicGenCLAPResult(MusicGenData):
-    """Extiende MusicGenData para incluir el CLAP Score."""
-
-    clap_score: float
 
 
 def generate_music_from_prompts(
@@ -106,6 +85,7 @@ def generate_music_from_prompts(
                     MusicGenData(
                         id=file_id,
                         taste=taste_name,
+                        instrument="N/A",
                         description=taste_prompt,
                         audio_path=output_path,
                     )
@@ -185,6 +165,7 @@ def compute_clap_scores(
                     id=r.id,
                     taste=r.taste,
                     description=r.description,
+                    instrument=r.instrument,
                     audio_path=r.audio_path,
                     clap_score=clap_score,
                 )
