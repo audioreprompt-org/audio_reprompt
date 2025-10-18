@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any
-import csv, json
+import csv
+import json
 
 from config import PROJECT_ROOT, load_config, get_data_config, get_evaluation_config
 from metrics.core.base import PromptRow, AudioItem, Metric
@@ -53,7 +54,6 @@ def run_from_config() -> dict[str, Any]:
     for name, metric_cfg in (eval_cfg.metrics or {}).items():
         metric = registry.get(name)
         if not metric:
-            # Produce a small “skipped” stub so the combined JSON is consistent
             stub = {"metric": name, "skipped": True, "reason": "not implemented"}
             (scores_dir / f"{name}_summary.json").parent.mkdir(parents=True, exist_ok=True)
             with open(scores_dir / f"{name}_summary.json", "w", encoding="utf-8") as f:
@@ -70,7 +70,6 @@ def run_from_config() -> dict[str, Any]:
         )
         results[name] = res
 
-    # Combined
     combined = {"device": device, "metrics": results}
     scores_dir.mkdir(parents=True, exist_ok=True)
     with open(scores_dir / "combined_summary.json", "w", encoding="utf-8") as f:

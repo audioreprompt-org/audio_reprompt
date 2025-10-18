@@ -62,4 +62,7 @@ environment:
 evaluation:
   metrics:
     clap:
-      output_csv_name: "results_with_clap.csv"
+      backend: hf_processor
+      backend_cfg:
+        model_id: laion/clap-htsat-fused
+      output_csv_name: results_with_clap.csv

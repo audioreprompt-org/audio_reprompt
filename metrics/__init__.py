@@ -6,8 +6,9 @@ Public API:
 - Core types: Metric, PromptRow, AudioItem
 (Other metrics are intentionally unimplemented right now.)
 """
-from .clap import CLAPItem, CLAPScored, calculate_scores
-from .core.base import Metric, PromptRow, AudioItem
+
+from metrics.clap import CLAPItem, CLAPScored, calculate_scores
+from metrics.core import AudioItem, PromptRow, Metric
 
 __all__ = [
     "CLAPItem", "CLAPScored", "calculate_scores",

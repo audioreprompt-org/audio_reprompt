@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import Dict, Any, List
-import csv, json
+from typing import Any, Optional
+import csv
+import json
 import numpy as np
 
 from metrics.core.base import Metric, PromptRow, AudioItem
@@ -12,16 +13,17 @@ class CLAPMetric(Metric):
     name = "clap"
 
     def run(
-        self,
-        prompts: List[PromptRow],
-        audio_items: List[AudioItem],
-        metric_cfg: Dict[str, Any],
-        device: str,
-        scores_dir: Path
-    ) -> Dict[str, Any]:
-        out_csv_name = metric_cfg.get("output_csv_name", "results_with_clap.csv")
+            self,
+            prompts: list[PromptRow],
+            audio_items: list[AudioItem],
+            metric_cfg: dict[str, Any],
+            device: str,
+            scores_dir: Path
+    ) -> dict[str, Any]:
+        csv_name = metric_cfg.get("output_csv_name", "results_with_clap.csv")
+        backend: str = metric_cfg.get("backend", "laion_module")
+        backend_cfg: Optional[dict[str, Any]] = metric_cfg.get("backend_cfg")
 
-        # Filter to items that actually exist on disk (engine should ensure this already)
         items = [
             clap_lib.CLAPItem(
                 id=it.id, description=it.description, audio_path=it.audio_path, instrument=it.instrument
@@ -29,10 +31,9 @@ class CLAPMetric(Metric):
             for it in audio_items
         ]
 
-        scored = clap_lib.calculate_scores(items, device=device)
+        scored = clap_lib.calculate_scores(items, device=device, backend=backend, backend_cfg=backend_cfg)
 
-        # Persist CSV (flat, DVC-friendly)
-        out_csv = scores_dir / out_csv_name
+        out_csv = scores_dir / csv_name
         out_csv.parent.mkdir(parents=True, exist_ok=True)
         with open(out_csv, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
@@ -40,8 +41,7 @@ class CLAPMetric(Metric):
             for s in scored:
                 w.writerow([s.item.id, s.item.instrument, s.item.description, s.item.audio_path, f"{s.clap_score:.6f}"])
 
-        # Simple stats by flavor
-        by_flavor = {}
+        by_flavor: dict[str, list[float]] = {}
         for s in scored:
             by_flavor.setdefault(s.item.instrument or "unknown", []).append(s.clap_score)
         per_flavor = {
@@ -49,10 +49,10 @@ class CLAPMetric(Metric):
             for k, v in by_flavor.items()
         }
 
-        # Summary JSON
         summary = {
             "metric": self.name,
             "device": device,
+            "backend": backend,
             "total_scored": len(scored),
             "csv_path": str(out_csv.relative_to(PROJECT_ROOT)),
             "per_flavor": per_flavor,
