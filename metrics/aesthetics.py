@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional
 
 
 @dataclass
@@ -23,7 +23,7 @@ def score(
         items: Iterable[AestheticsItem],
         device: Optional[str] = None,
         clamp_seconds: Optional[float] = None
-) -> List[AestheticsScored]:
+) -> list[AestheticsScored]:
     """
     Not implemented on purpose in this phase. We expose the function with the correct
     signature so call sites fail fast with a helpful message if invoked.

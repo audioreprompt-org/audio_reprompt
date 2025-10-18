@@ -1,14 +1,14 @@
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any
 import csv, json
 
 from config import PROJECT_ROOT, load_config, get_data_config, get_evaluation_config
 from metrics.core.base import PromptRow, AudioItem, Metric
-from metrics.core.registry import build_metric_registry
+from metrics.implementation import CLAPMetric
 
 
-def _read_prompts_csv(csv_path: Path) -> List[PromptRow]:
-    rows: List[PromptRow] = []
+def _read_prompts_csv(csv_path: Path) -> list[PromptRow]:
+    rows: list[PromptRow] = []
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for r in reader:
@@ -22,8 +22,8 @@ def _read_prompts_csv(csv_path: Path) -> List[PromptRow]:
     return rows
 
 
-def _match_audio_items(prompts: List[PromptRow], tracks_dir: Path) -> List[AudioItem]:
-    out: List[AudioItem] = []
+def _match_audio_items(prompts: list[PromptRow], tracks_dir: Path) -> list[AudioItem]:
+    out: list[AudioItem] = []
     for p in prompts:
         f = tracks_dir / f"{p.id}.wav"
         if f.exists():
@@ -33,7 +33,7 @@ def _match_audio_items(prompts: List[PromptRow], tracks_dir: Path) -> List[Audio
     return out
 
 
-def run_from_config() -> Dict[str, Any]:
+def run_from_config() -> dict[str, Any]:
     cfg = load_config()
     data_cfg = get_data_config()
     eval_cfg = get_evaluation_config()
@@ -46,8 +46,10 @@ def run_from_config() -> Dict[str, Any]:
     prompts = _read_prompts_csv(prompts_csv)
     audio_items = _match_audio_items(prompts, tracks_dir)
 
-    registry: Dict[str, Metric] = build_metric_registry()
-    results: Dict[str, Any] = {}
+    registry: dict[str, Metric] = {
+        "clap": CLAPMetric(),
+    }
+    results: dict[str, Any] = {}
     for name, metric_cfg in (eval_cfg.metrics or {}).items():
         metric = registry.get(name)
         if not metric:
