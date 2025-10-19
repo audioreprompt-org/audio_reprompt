@@ -4,11 +4,11 @@
 from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-from .manager import (
+from config.manager import (
   ConfigurationError,
 )
 
-from .types import (
+from config.typedefs import (
   Config,
   DataConfig,
   ModelConfig,
@@ -16,9 +16,11 @@ from .types import (
   InferenceConfig,
   LoggingConfig,
   EnvironmentConfig,
+  EvaluationConfig,
 )
 
-from .config import (
+
+from config.config import (
     load_config,
     reload_config,
     get_data_config,
@@ -29,10 +31,12 @@ from .config import (
     get_environment_config,
     get_config_value,
     setup_project_paths,
-    get_raw_config, 
+    get_raw_config,
+    get_evaluation_config
 )
 
 __all__ = [
+    'PROJECT_ROOT',
     'load_config',
     'reload_config',
     'get_data_config',
@@ -44,6 +48,7 @@ __all__ = [
     'get_config_value',
     'setup_project_paths',
     'get_raw_config',
+    'get_evaluation_config',
     'Config',
     'DataConfig',
     'ModelConfig',
@@ -52,4 +57,5 @@ __all__ = [
     'LoggingConfig',
     'EnvironmentConfig',
     'ConfigurationError',
+    'EvaluationConfig',
 ]
