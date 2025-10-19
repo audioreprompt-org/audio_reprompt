@@ -55,19 +55,25 @@ def map_words_with_pos(words: list[str]) -> dict[str, str]:
     return {word_: tag for word_, tag in pos_tag(words) if get_salient_words(tag)}
 
 
-def parse(sentence_list: list[str], lang: str) -> list[dict[str, str]]:
-    results = []
-    for sentence in sentence_list:
-        tokens = remove_stopwords(sentence, lang=lang)
-        words_pos_map = map_words_with_pos(tokens)
-
-        print(words_pos_map)
-        results.append(words_pos_map)
-
-    return results
+def parse_multi(sentence_list: list[str], lang: str) -> list[dict[str, str]]:
+    return [parse(sentence, lang) for sentence in sentence_list]
 
 
-if __name__ == "__main__":
+def parse(sentence: str, lang: str) -> dict[str, str]:
+    print(f"original sentence: `{sentence}`")
+
+    tokens = remove_stopwords(sentence, lang=lang)
+    words_pos_map = map_words_with_pos(tokens)
+
+    print(f"result: {words_pos_map}")
+    return words_pos_map
+
+
+def concat_salient_words(word_pos_map: dict[str, str]) -> tuple[str, ...]:
+    return tuple(" ".join(word_pos_map.keys()))
+
+
+def test():
     sentences = [
         "Sugar tastes sweet.",
         "The lemonade is too sour.",
@@ -78,5 +84,11 @@ if __name__ == "__main__":
 
     spanish_sentences = ["Esta es una oración de ejemplo en español."]
 
-    assert len(parse(sentences, "english")) >= 1
-    assert len(parse(spanish_sentences, "spanish")) >= 1
+    assert len(parse_multi(sentences, "english")) >= 1
+    assert len(parse_multi(spanish_sentences, "spanish")) >= 1
+
+    assert len(concat_salient_words(parse(sentences[0], "english"))) >= 1
+
+
+if __name__ == "__main__":
+    test()
