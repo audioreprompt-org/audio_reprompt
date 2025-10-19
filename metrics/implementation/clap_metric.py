@@ -31,7 +31,7 @@ class CLAPMetric(Metric):
             for it in audio_items
         ]
 
-        scored = clap_lib.calculate_scores(items, device=device, backend=backend, backend_cfg=backend_cfg)
+        scored = clap_lib.calculate_scores(items, device=device, backend=backend)
 
         out_csv = scores_dir / csv_name
         out_csv.parent.mkdir(parents=True, exist_ok=True)

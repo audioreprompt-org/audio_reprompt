@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import csv
 import os
 from pathlib import Path
@@ -83,18 +85,18 @@ def test_compare_backends_with_real_audio_exports() -> None:
         base_scores = PROJECT_ROOT / data_cfg.data_clap_path
     except Exception:
         base_scores = PROJECT_ROOT / "data" / "scores"
-    out_dir = base_scores / "method_comparison"
+    out_dir = base_scores / "method_compairison"
     _ensure_dir(out_dir)
 
     items = _load_real_items(max_items=max_items)
-    if len(items) < 3:
-        print("SKIP: Not enough real items with matching .wav files found via config.")
+    if len(items) < 1:
+        print("SKIP: No real items with matching .wav files found via config.")
         return
 
     preferred = ["hf_processor", "lass", "laion_module"]
     avail = [b for b in preferred if b in set(available_backends())]
-    if len(avail) < 2:
-        print(f"SKIP: Need at least 2 CLAP backends available. Found: {avail}")
+    if len(avail) < 1:
+        print("SKIP: No CLAP backends available.")
         return
 
     print("\n=== CLAP Backend Comparison (real audio) ===")
@@ -102,14 +104,12 @@ def test_compare_backends_with_real_audio_exports() -> None:
     print(f"Backends considered: {avail}")
     print(f"Outputs -> {out_dir}")
 
-    # Save items metadata
     _write_csv(
         out_dir / "items.csv",
         ["idx", "id", "instrument", "description", "audio_path"],
         ((i, it.id, it.instrument or "unknown", it.description, it.audio_path) for i, it in enumerate(items)),
     )
 
-    # Scores (long format) and per-backend summaries
     scores_long_rows: list[tuple[str, int, str, str, float]] = []
     per_backend_means: dict[str, np.ndarray] = {}
     per_backend_stds: dict[str, np.ndarray] = {}
@@ -124,19 +124,16 @@ def test_compare_backends_with_real_audio_exports() -> None:
             continue
 
         matrices[be] = mat
-        # Long rows
         for run_idx in range(mat.shape[0]):
             for item_idx, it in enumerate(items):
                 val = float(mat[run_idx, item_idx])
                 scores_long_rows.append((be, run_idx, it.id, it.instrument or "unknown", val))
 
-        # Per-item mean/std across runs
         per_item_mean = mat.mean(axis=0)
         per_item_std = mat.std(axis=0)
         per_backend_means[be] = per_item_mean
         per_backend_stds[be] = per_item_std
 
-        # Overall summaries of per-item means
         overall_mean = float(per_item_mean.mean())
         overall_std = float(per_item_mean.std())
         avg_run_std = float(per_item_std.mean())
@@ -147,30 +144,41 @@ def test_compare_backends_with_real_audio_exports() -> None:
             (be, len(items), overall_mean, overall_std, avg_run_std, min_v, max_v)
         )
 
-    # If fewer than 2 succeeded, finish with what we produced
-    if len(matrices) < 2:
-        print(f"Only {len(matrices)} backend(s) produced scores. Exporting partial results.")
-        if scores_long_rows:
-            _write_csv(out_dir / "scores_long.csv", ["backend", "run", "item_id", "instrument", "score"], scores_long_rows)
-        if per_backend_summary_rows:
-            _write_csv(
-                out_dir / "per_backend_summary.csv",
-                ["backend", "n_items", "mean_of_means", "std_of_means", "avg_run_std", "min_mean", "max_mean"],
-                per_backend_summary_rows,
-            )
-        return
+    # Always write what we have so far (even if only 1 backend worked)
+    if scores_long_rows:
+        _write_csv(out_dir / "scores_long.csv", ["backend", "run", "item_id", "instrument", "score"], scores_long_rows)
+    if per_backend_summary_rows:
+        _write_csv(
+            out_dir / "per_backend_summary.csv",
+            ["backend", "n_items", "mean_of_means", "std_of_means", "avg_run_std", "min_mean", "max_mean"],
+            per_backend_summary_rows,
+        )
 
-    # Write combined scores and backend summaries
-    _write_csv(out_dir / "scores_long.csv", ["backend", "run", "item_id", "instrument", "score"], scores_long_rows)
-    _write_csv(
-        out_dir / "per_backend_summary.csv",
-        ["backend", "n_items", "mean_of_means", "std_of_means", "avg_run_std", "min_mean", "max_mean"],
-        per_backend_summary_rows,
-    )
+    # NEW: per-item wide CSV (one row per item, backend columns with mean and std)
+    names = list(matrices.keys())
+    if names:
+        wide_header: list[str] = ["idx", "id", "instrument", "description", "audio_path"]
+        for be in names:
+            wide_header.extend([f"{be}_mean", f"{be}_std"])
+        wide_rows: list[list[object]] = []
+        for i, it in enumerate(items):
+            row: list[object] = [i, it.id, it.instrument or "unknown", it.description, it.audio_path]
+            for be in names:
+                m = per_backend_means.get(be)
+                s = per_backend_stds.get(be)
+                mv = float(m[i]) if m is not None else float("nan")
+                sv = float(s[i]) if s is not None else float("nan")
+                row.extend([f"{mv:.6f}", f"{sv:.6f}"])
+            wide_rows.append(row)
+        _write_csv(out_dir / "scores_wide.csv", wide_header, wide_rows)
+
+    # If fewer than 2 succeeded, stop after exporting the wide CSV
+    if len(matrices) < 2:
+        print(f"Only {len(matrices)} backend(s) produced scores. Exported partial CSVs in {out_dir}.")
+        return
 
     # Pairwise comparisons on per-item means
     pair_rows: list[tuple[str, str, float, float, float, float]] = []
-    names = list(matrices.keys())
     for i in range(len(names)):
         for j in range(i + 1, len(names)):
             a_name, b_name = names[i], names[j]
@@ -183,38 +191,36 @@ def test_compare_backends_with_real_audio_exports() -> None:
             pair_rows.append((a_name, b_name, pear, spear, mae, rmse))
     _write_csv(out_dir / "pairwise_summary.csv", ["backend_a", "backend_b", "pearson", "spearman", "mae", "rmse"], pair_rows)
 
-    # Group differences (first pair for brevity)
+    # Group differences (first pair only)
     group_rows: list[tuple[str, str, str, int, float, float]] = []
-    if len(names) >= 2:
-        a_name, b_name = names[0], names[1]
-        a_mean = per_backend_means[a_name]
-        b_mean = per_backend_means[b_name]
-        groups: dict[str, list[int]] = {}
-        for idx, it in enumerate(items):
-            groups.setdefault(it.instrument or "unknown", []).append(idx)
-        for g, idxs in groups.items():
-            idxs_arr = np.array(idxs, dtype=int)
-            if idxs_arr.size == 0:
-                continue
-            diff = a_mean[idxs_arr] - b_mean[idxs_arr]
-            g_mae = float(np.mean(np.abs(diff)))
-            g_rmse = float(np.sqrt(np.mean(diff**2)))
-            g_n = int(idxs_arr.size)
-            group_rows.append((a_name, b_name, g, g_n, g_mae, g_rmse))
-        _write_csv(
-            out_dir / f"group_diffs_{a_name}_vs_{b_name}.csv",
-            ["backend_a", "backend_b", "group", "n", "mae", "rmse"],
-            group_rows,
-        )
+    a_name, b_name = names[0], names[1]
+    a_mean = per_backend_means[a_name]
+    b_mean = per_backend_means[b_name]
+    groups: dict[str, list[int]] = {}
+    for idx, it in enumerate(items):
+        groups.setdefault(it.instrument or "unknown", []).append(idx)
+    for g, idxs in groups.items():
+        idxs_arr = np.array(idxs, dtype=int)
+        if idxs_arr.size == 0:
+            continue
+        diff = a_mean[idxs_arr] - b_mean[idxs_arr]
+        g_mae = float(np.mean(np.abs(diff)))
+        g_rmse = float(np.sqrt(np.mean(diff**2)))
+        g_n = int(idxs_arr.size)
+        group_rows.append((a_name, b_name, g, g_n, g_mae, g_rmse))
+    _write_csv(
+        out_dir / f"group_diffs_{a_name}_vs_{b_name}.csv",
+        ["backend_a", "backend_b", "group", "n", "mae", "rmse"],
+        group_rows,
+    )
 
-    # Plots (optional)
+    # Plots
     try:
         import plotly.graph_objects as go
         import plotly.io as pio
 
-        # Box plot of per-item means per backend
         box_fig = go.Figure()
-        for be, means in per_backend_means.items():
+        for be, means in ((k, per_backend_means[k]) for k in names):
             box_fig.add_trace(go.Box(y=means.tolist(), name=be, boxmean=True))
         box_fig.update_layout(
             title="CLAP per-item mean score distribution by backend",
@@ -224,7 +230,6 @@ def test_compare_backends_with_real_audio_exports() -> None:
         )
         pio.write_html(box_fig, file=str(out_dir / "box_backend_means.html"), include_plotlyjs="cdn", auto_open=False)
 
-        # Scatter plots per pair (per-item means)
         for i in range(len(names)):
             for j in range(i + 1, len(names)):
                 a_name, b_name = names[i], names[j]

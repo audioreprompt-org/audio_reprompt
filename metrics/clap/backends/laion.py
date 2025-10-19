@@ -1,4 +1,4 @@
-from typing import Iterable, Any, Optional
+from typing import Iterable
 import numpy as np
 import torch
 import torchaudio
@@ -10,7 +10,7 @@ from metrics.clap.backends.base import BackendUnavailable, _resolve_device
 class LaionBackend:
     name = "laion_module"
 
-    def __init__(self, device: str, backend_cfg: Optional[dict[str, Any]] = None) -> None:
+    def __init__(self, device: str) -> None:
         self.device = _resolve_device(device)
         try:
             from laion_clap import CLAP_Module  # type: ignore
@@ -19,6 +19,10 @@ class LaionBackend:
         self.model = CLAP_Module(enable_fusion=True)
         self.model.load_ckpt()
         self.model.eval().to(self.device)
+        if not self.model.training and not self.model.training:  # double-check eval mode
+            pass
+        else:
+            raise BackendUnavailable("CLAP_Module not in eval mode after load_ckpt().")
 
     @torch.no_grad()
     def score_batch(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:

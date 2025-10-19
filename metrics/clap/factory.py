@@ -1,4 +1,4 @@
-from typing import Iterable, Any, Optional
+from typing import Iterable, Optional
 
 from metrics.clap.backends import HFProcessorBackend, LASSBackend, LaionBackend
 from metrics.clap.backends.base import BackendUnavailable
@@ -33,22 +33,21 @@ def available_backends() -> list[str]:
     return uniq
 
 
-def _make_backend(backend: str, device: Optional[str], backend_cfg: Optional[dict[str, Any]]):
+def _make_backend(backend: str, device: Optional[str]):
     key = (backend or "").strip().lower()
     if key not in _BACKENDS:
         raise ValueError(f"Unknown backend '{backend}'. Available: {', '.join(_BACKENDS.keys())}")
     try:
-        return _BACKENDS[key](device=device or "auto", backend_cfg=backend_cfg)
+        return _BACKENDS[key](device=device or "auto")
     except BackendUnavailable as e:
         raise RuntimeError(f"Backend '{backend}' unavailable: {e}") from e
 
 
 def calculate_scores(
-        items: Iterable[CLAPItem],
-        device: Optional[str] = None,
-        *,
-        backend: str = "laion_module",
-        backend_cfg: Optional[dict[str, Any]] = None
+    items: Iterable[CLAPItem],
+    device: Optional[str] = None,
+    *,
+    backend: str = "laion_module",
 ) -> list[CLAPScored]:
-    be = _make_backend(backend, device, backend_cfg)
+    be = _make_backend(backend, device)
     return be.score_batch(items)

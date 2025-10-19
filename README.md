@@ -74,8 +74,16 @@ Para más información haga clic [aquí](https://github.com/audioreprompt-org/au
 
 ### Cómo correr la evaluación
 
+1. Una vez:
+
 ```bash
 uv run -m models.scripts.evaluate
+```
+
+2. Estadisticas:
+
+```bash
+uv run -m pytest -m integration metrics/tests/test_clap_backends.py -q
 ```
 
 Esto:

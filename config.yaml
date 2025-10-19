@@ -63,6 +63,4 @@ evaluation:
   metrics:
     clap:
       backend: hf_processor
-      backend_cfg:
-        model_id: laion/clap-htsat-fused
       output_csv_name: results_with_clap.csv

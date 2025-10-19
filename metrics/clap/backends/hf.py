@@ -1,4 +1,4 @@
-from typing import Iterable, Any, Optional
+from typing import Iterable
 import numpy as np
 import torch
 import torchaudio
@@ -7,22 +7,29 @@ from metrics.clap.types import CLAPItem, CLAPScored, TARGET_SR
 from metrics.clap.backends.base import BackendUnavailable, _resolve_device
 
 
+_EXPECTED_MODEL_ID = "laion/clap-htsat-fused"
+
+
 class HFProcessorBackend:
     name = "hf_processor"
 
-    def __init__(self, device: str, backend_cfg: Optional[dict[str, Any]] = None) -> None:
+    def __init__(self, device: str) -> None:
         self.device = _resolve_device(device)
         try:
             from transformers import ClapProcessor, ClapModel  # type: ignore
         except Exception as e:
             raise BackendUnavailable("Install `transformers` to use hf_processor backend.") from e
-        model_id = (backend_cfg or {}).get("model_id", "laion/clap-htsat-fused")
         try:
-            self.processor = ClapProcessor.from_pretrained(model_id)
-            self.model = ClapModel.from_pretrained(model_id)
+            self.processor = ClapProcessor.from_pretrained(_EXPECTED_MODEL_ID)
+            self.model = ClapModel.from_pretrained(_EXPECTED_MODEL_ID)
             self.model.eval().to(self.device)
         except Exception as e:
-            raise BackendUnavailable(f"Failed to load HF model '{model_id}'.") from e
+            raise BackendUnavailable(f"Failed to load HF model '{_EXPECTED_MODEL_ID}'.") from e
+
+        # Verify weights come from the expected repo id.
+        name_or_path = getattr(self.model, "name_or_path", None) or getattr(getattr(self.model, "config", None), "_name_or_path", None)
+        if name_or_path and _EXPECTED_MODEL_ID not in str(name_or_path):
+            raise BackendUnavailable(f"Unexpected HF model source: '{name_or_path}' (expected '{_EXPECTED_MODEL_ID}')")
 
     @torch.no_grad()
     def score_batch(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:
