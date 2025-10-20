@@ -69,8 +69,8 @@ def parse(sentence: str, lang: str) -> dict[str, str]:
     return words_pos_map
 
 
-def concat_salient_words(word_pos_map: dict[str, str]) -> tuple[str, ...]:
-    return tuple(" ".join(word_pos_map.keys()))
+def concat_salient_words(word_pos_map: dict[str, str]) -> str:
+    return " ".join(word_pos_map.keys())
 
 
 def test():
