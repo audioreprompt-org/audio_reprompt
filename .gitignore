@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+**/.jython_cache
 
 # C extensions
 *.so
