@@ -2,6 +2,7 @@ import logging
 
 import pandas as pd
 import torch
+import torch.nn.functional as F
 import torch.hub
 from laion_clap import CLAP_Module
 from models.prompts.spanio_captions import load_spanio_captions
@@ -45,7 +46,9 @@ def get_text_embeddings_in_batches(descriptors: list[str], batch_size: int = 16)
     with torch.no_grad():
         for pos in range(0, len(descriptors), batch_size):
             batch = descriptors[pos : pos + batch_size]
-            emb = model.get_text_embedding(batch, use_tensor=True)
+            emb = F.normalize(
+                model.get_text_embedding(batch, use_tensor=True), p=2, dim=-1
+            )
             for text, embedding in zip(batch, emb.cpu()):
                 embeddings.append({"text": text, "embedding": embedding.tolist()})
 
