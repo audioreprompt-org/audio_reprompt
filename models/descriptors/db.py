@@ -5,7 +5,7 @@ import os
 from typing import Iterable, Sequence
 
 import numpy as np
-from models.prompts.clap_prompt_encoder import SpanioCaptionsEmbedding
+from models.descriptors.spanio_captions import SpanioCaptionsEmbedding
 from psycopg import connect, sql
 from pydantic import BaseModel
 
