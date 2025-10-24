@@ -5,7 +5,7 @@ import os
 from typing import Iterable, Sequence
 
 import numpy as np
-from models.prompts.clap_prompt_encoder import SpanioCaptionsEmbedding
+from models.descriptors.spanio_captions import SpanioCaptionsEmbedding
 from psycopg import connect, sql
 from pydantic import BaseModel
 
@@ -17,11 +17,23 @@ DB_HOST = os.environ["DB_HOST"]
 DB_NAME = os.environ["DB_NAME"]
 
 AUDIO_DESCRIPTOR_TABLE_NAME = "audio_descriptors"
+GUEDES_AUDIO_TABLE_NAME = "guedes_audio_embeddings"
+
+RUN_GUEDES = True
 
 
 class AudioDescriptorItem(BaseModel):
     caption: str
     clap_embedding: list[float]
+
+
+class GuedesAudioDescriptorItem(BaseModel):
+    audio_id: str
+    audio_embedding: list[float]
+    sweet_rate: float
+    bitter_rate: float
+    sour_rate: float
+    salty_rate: float
 
 
 def get_conn():
@@ -43,6 +55,101 @@ def create_audio_descriptors_table() -> None:
         )""").format(table_name=sql.Identifier(AUDIO_DESCRIPTOR_TABLE_NAME))
 
         cursor.execute(create_ad_table)
+
+
+def create_audio_guedes_table() -> None:
+    """
+    Create the table to store Guedes audio embeddings and taste rates.
+    Table: guedes_audio_embeddings
+    Primary key: audio_id
+    """
+    with get_conn().cursor() as cursor:
+        cursor.execute("create extension if not exists vector;")
+        create_tbl = sql.SQL("""
+        create table if not exists {table_name} (
+            audio_id text primary key,
+            embedding vector(512) not null,
+            sweet_rate real not null,
+            bitter_rate real not null,
+            sour_rate real not null,
+            salty_rate real not null
+        )
+        """).format(table_name=sql.Identifier(GUEDES_AUDIO_TABLE_NAME))
+        cursor.execute(create_tbl)
+
+
+def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
+    """
+    Load items from data/docs/guedes_audio_embeddings.csv
+    Expected columns:
+      id, audio_embedding (JSON list), sweet_rate, bitter_rate, sour_rate, salty_rate
+    """
+    items: list[GuedesAudioDescriptorItem] = []
+    file_path = os.path.join(os.getcwd(), "data/docs/guedes_audio_embeddings.csv")
+
+    with open(file_path, "r") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            audio_id = (row.get("id") or row.get("audio_id") or "").strip()
+            emb_raw = row.get("audio_embedding") or row.get("embedding")
+
+            if not audio_id or emb_raw is None:
+                logger.warning(f"Skipping row with missing id/embedding: {row}")
+                continue
+
+            try:
+                emb_list = [float(x) for x in json.loads(emb_raw)]
+                sweet = float(row["sweet_rate"])
+                bitter = float(row["bitter_rate"])
+                sour = float(row["sour_rate"])
+                salty = float(row["salty_rate"])
+            except Exception as e:
+                logger.error(f"Skipping row due to parse error for audio_id={audio_id}: {e}")
+                continue
+
+            items.append(
+                GuedesAudioDescriptorItem(
+                    audio_id=audio_id,
+                    audio_embedding=emb_list,
+                    sweet_rate=sweet,
+                    bitter_rate=bitter,
+                    sour_rate=sour,
+                    salty_rate=salty,
+                )
+            )
+
+    return items
+
+
+def insert_guedes_audio_descriptor_items(items: list[GuedesAudioDescriptorItem]) -> bool:
+    """
+    Insert Guedes items into guedes_audio_embeddings.
+    Uses ON CONFLICT DO NOTHING so the script can be re-run safely.
+    """
+    try:
+        params: Sequence[tuple[str, list[float], float, float, float, float]] = [
+            (
+                it.audio_id,
+                it.audio_embedding,
+                it.sweet_rate,
+                it.bitter_rate,
+                it.sour_rate,
+                it.salty_rate,
+            )
+            for it in items
+        ]
+        with get_conn().cursor() as cursor:
+            insert_sql = sql.SQL("""
+                insert into {tbl} (audio_id, embedding, sweet_rate, bitter_rate, sour_rate, salty_rate)
+                values (%s, %s, %s, %s, %s, %s)
+            """).format(tbl=sql.Identifier(GUEDES_AUDIO_TABLE_NAME))
+            cursor.executemany(insert_sql, params)
+            logger.info(f"Inserted {cursor.rowcount} rows into {GUEDES_AUDIO_TABLE_NAME}.")
+        return True
+    except Exception as e:
+        logger.error(f"Error inserting Guedes audio embeddings: {e}")
+        logger.critical("Failed to insert Guedes items.", exc_info=True)
+        return False
 
 
 def insert_audio_descriptors(
@@ -130,6 +237,11 @@ def test():
 
 
 if __name__ == "__main__":
-    create_audio_descriptors_table()
-    reading_items = load_audio_descriptor_items()
-    insert_audio_descriptor_items(reading_items)
+    if RUN_GUEDES:
+        create_audio_guedes_table()
+        guedes_items = load_guedes_audio_descriptor_items()
+        insert_guedes_audio_descriptor_items(guedes_items)
+    else:
+        create_audio_descriptors_table()
+        reading_items = load_audio_descriptor_items()
+        insert_audio_descriptor_items(reading_items)
