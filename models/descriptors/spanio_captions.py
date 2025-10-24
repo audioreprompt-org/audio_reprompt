@@ -35,7 +35,7 @@ def load_spanio_captions() -> list[str]:
 
 
 def load_spanio_captions_embeddings() -> list[SpanioCaptionsEmbedding]:
-    file_path = os.getcwd() + "/data/docs/spanio_captions_embeddings.json"
+    file_path = os.getcwd() + "/data/docs/spanio_captions_embeddings.csv"
 
     caption_embeddings: list[SpanioCaptionsEmbedding] = []
 

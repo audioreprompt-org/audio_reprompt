@@ -1,7 +1,7 @@
 from typing import Optional
 
-from nltk import pos_tag
-from nltk.corpus import stopwords
+from nltk import pos_tag, WordNetLemmatizer
+from nltk.corpus import stopwords, wordnet
 from nltk.corpus import wordnet as wn
 from nltk.tokenize import RegexpTokenizer
 
@@ -20,39 +20,33 @@ def get_synonyms(word: str, pos: Optional[str] = None) -> list:
 
 def remove_stopwords(sentence, lang: Optional[str] = "spanish") -> list[str]:
     tokenizer = RegexpTokenizer(r"[\w']+")
-    words = tokenizer.tokenize(sentence)
+    words = [word.lower() for word in tokenizer.tokenize(sentence)]
 
     if not words:
         return []
 
-    words = [word.lower() for word in words]
-    return list(filter(lambda w: w not in stopwords.words(lang), words))
+    stopwords_lang = stopwords.words(lang)
+    return list(filter(lambda w: w not in stopwords_lang, words))
 
 
 def get_salient_words(pos: str) -> bool:
-    salient_pos = {
-        "NN",
-        "NNS",
-        "NNP",
-        "NNPS",  # nouns
-        "VB",
-        "VBD",
-        "VBG",
-        "VBN",
-        "VBP",
-        "VBZ",  # verbs
-        "JJ",
-        "JJR",
-        "JJS",  # adjectives
-        "RB",
-        "RBR",
-        "RBS",  # adverbs
+    return pos.upper() in {"J", "N", "V", "R"}
+
+
+def get_wordnet_pos(word):
+    tag = pos_tag([word])[0][1][0].upper()
+    tag_dict = {
+        "J": wordnet.ADJ,
+        "N": wordnet.NOUN,
+        "V": wordnet.VERB,
+        "R": wordnet.ADV,
     }
-    return pos in salient_pos
+    return tag_dict.get(tag, wordnet.NOUN)
 
 
 def map_words_with_pos(words: list[str]) -> dict[str, str]:
-    return {word_: tag for word_, tag in pos_tag(words) if get_salient_words(tag)}
+    words_pos_map = {word: get_wordnet_pos(word) for word in words}
+    return dict(filter(lambda item: get_salient_words(item[1]), words_pos_map.items()))
 
 
 def parse_multi(sentence_list: list[str], lang: str) -> list[dict[str, str]]:
@@ -65,8 +59,13 @@ def parse(sentence: str, lang: str) -> dict[str, str]:
     tokens = remove_stopwords(sentence, lang=lang)
     words_pos_map = map_words_with_pos(tokens)
 
-    print(f"result: {words_pos_map}")
-    return words_pos_map
+    lemmatized_words = {
+        WordNetLemmatizer().lemmatize(word, pos): pos.upper()
+        for word, pos in words_pos_map.items()
+    }
+
+    print(f"result: {lemmatized_words}")
+    return lemmatized_words
 
 
 def concat_salient_words(word_pos_map: dict[str, str]) -> str:

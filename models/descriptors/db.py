@@ -104,7 +104,9 @@ def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
                 sour = float(row["sour_rate"])
                 salty = float(row["salty_rate"])
             except Exception as e:
-                logger.error(f"Skipping row due to parse error for audio_id={audio_id}: {e}")
+                logger.error(
+                    f"Skipping row due to parse error for audio_id={audio_id}: {e}"
+                )
                 continue
 
             items.append(
@@ -121,7 +123,9 @@ def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
     return items
 
 
-def insert_guedes_audio_descriptor_items(items: list[GuedesAudioDescriptorItem]) -> bool:
+def insert_guedes_audio_descriptor_items(
+    items: list[GuedesAudioDescriptorItem],
+) -> bool:
     """
     Insert Guedes items into guedes_audio_embeddings.
     Uses ON CONFLICT DO NOTHING so the script can be re-run safely.
@@ -144,7 +148,9 @@ def insert_guedes_audio_descriptor_items(items: list[GuedesAudioDescriptorItem])
                 values (%s, %s, %s, %s, %s, %s)
             """).format(tbl=sql.Identifier(GUEDES_AUDIO_TABLE_NAME))
             cursor.executemany(insert_sql, params)
-            logger.info(f"Inserted {cursor.rowcount} rows into {GUEDES_AUDIO_TABLE_NAME}.")
+            logger.info(
+                f"Inserted {cursor.rowcount} rows into {GUEDES_AUDIO_TABLE_NAME}."
+            )
         return True
     except Exception as e:
         logger.error(f"Error inserting Guedes audio embeddings: {e}")
@@ -212,12 +218,12 @@ def get_top_k_audio_captions(
             """
             select 
                 caption,
-                1- (embedding <=> %(embedding)s) as sim
+                embedding <=> %(embedding)s::vector as sim
             from audio_descriptors
-            order by embedding <=> %(embedding)s 
+            order by embedding <=> %(embedding)s::vector
             limit %(limit)s
             """,
-            params={"embedding": caption_embedding, "limit": k},
+            {"embedding": caption_embedding["embedding"], "limit": k},
         )
 
         results: dict[str, float] = {caption: sim for caption, sim in cursor.fetchall()}
