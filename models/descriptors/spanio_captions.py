@@ -3,7 +3,7 @@ import json
 import os
 from typing import TypedDict
 
-from models.prompts.parser import concat_salient_words, parse
+from models.descriptors.parser import concat_salient_words, parse
 
 
 class SpanioCaptionsEmbedding(TypedDict):
