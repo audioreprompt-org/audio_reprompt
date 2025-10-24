@@ -13,12 +13,12 @@ def read_json(file_path: str) -> dict[str, Any] | list[dict[str, Any]]:
     return data
 
 
-def read_csv(file_path: str) -> list[list[str]]:
+def read_csv(file_path: str) -> dict[str, Any]:
     with open(file_path, "r", encoding="utf-8") as f:
-        csv_reader = csv.reader(f)
-        next(csv_reader)
+        csv_reader = csv.DictReader(f)
+        rows = [row for row in csv_reader]
 
-    return [row for row in csv_reader]
+    return rows
 
 
 class DatasetLoader(Dataset):
@@ -34,7 +34,7 @@ class DatasetLoader(Dataset):
         """
         super().__init__()
         self.file_path = file_path
-        self.format = format_
+        self.format_ = format_
         self.records: list[PromptItemLoader] = []
         self._load_data(self.format_)
 
@@ -46,12 +46,7 @@ class DatasetLoader(Dataset):
         try:
             self.records = read_functions[file_format](self.file_path)
         except Exception as e:
-            print(f"Error cargando {self.json_file_path}: {e}")
-
-        if file_format == "csv":
-            self.records = [
-                {"id": record[0], "prompt": record[1]} for record in self.records
-            ]
+            print(f"Error cargando {self.file_path}: {e}")
 
     def __len__(self) -> int:
         """
