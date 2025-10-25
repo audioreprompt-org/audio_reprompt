@@ -209,3 +209,9 @@ __marimo__/
 
 # Idea - PyCharm
 .idea/
+
+
+# terraform
+terraform/stacks/apps_base/.tfplan
+terraform/stacks/apps_base/.terraform.lock.hcl
+terraform/stacks/apps_base/.terraform/
