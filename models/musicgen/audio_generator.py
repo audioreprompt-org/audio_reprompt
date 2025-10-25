@@ -1,7 +1,6 @@
 import logging
 import os
 import scipy.io.wavfile
-from models.musicgen.typedefs import OutputGeneratedAudioItem
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)

@@ -1,10 +1,16 @@
+import csv
 import os
 from collections import Counter
+from pathlib import Path
 from typing import TypedDict
 
 import numpy as np
 import pandas as pd
 
+from models.descriptors.clap_audio_encoder import (
+    get_only_audio_embeddings,
+    _find_audio_files,
+)
 from models.descriptors.db import get_top_k_audio_captions
 from models.descriptors.parser import parse
 from models.descriptors.spanio_captions import (
@@ -50,7 +56,29 @@ def get_augmented_prompt_spanio_captions() -> list[SpanioAugmentedPrompt]:
     return results
 
 
+def load_rag_spanio_captions() -> list[dict[str, str | int | float]]:
+    rag_filepath = os.getcwd() + "/data/docs/rag_spanio_captions.csv"
+    with open(rag_filepath, "r") as f:
+        csv_reader = csv.DictReader(f)
+        return [row for row in csv_reader]
+
+
 if __name__ == "__main__":
-    res = get_augmented_prompt_spanio_captions()
-    file_path = os.getcwd() + "/data/docs/rag_spanio_captions.csv"
-    pd.DataFrame(res).to_csv(file_path, index=False)
+    # manual setup
+    RAG_CAPTIONS_OPTION = 0
+    RAG_AUDIO_EMBEDDINGS_OPTION = 1
+
+    if RAG_CAPTIONS_OPTION == 1:
+        res = get_augmented_prompt_spanio_captions()
+        file_path = os.getcwd() + "/data/docs/rag_spanio_captions.csv"
+        pd.DataFrame(res).to_csv(file_path, index=False)
+
+    elif RAG_AUDIO_EMBEDDINGS_OPTION == 1:
+        res = load_rag_spanio_captions()
+        rag_audios_dir = Path(os.getcwd()) / "data/tracks/rag_music"
+        audios = _find_audio_files(rag_audios_dir)
+        pd.DataFrame(get_only_audio_embeddings(audios)).to_csv(
+            "data/docs/rag_audio_embeddings.csv",
+            header=["audio_id", "embedding"],
+            index=False,
+        )
