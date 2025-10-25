@@ -28,6 +28,26 @@ def _load_audio_tensor(path: Path, device: str) -> torch.Tensor:
     return wav.to(device)
 
 
+def get_only_audio_embeddings(paths: Iterable[Path]) -> list[tuple[str, list[float]]]:
+    model = clap_model()
+    device = next(model.parameters()).device.type
+    embeddings = []
+
+    with torch.no_grad():
+        for i, p in enumerate(paths):
+            try:
+                p = Path(p)
+                wav = _load_audio_tensor(p, device)
+                emb = model.get_audio_embedding_from_data(wav, use_tensor=True)
+                emb = F.normalize(emb, p=2, dim=-1).squeeze(0).cpu().tolist()
+
+                embeddings.append((p.name, emb))
+            except Exception as e:
+                logger.error(f"Failed embedding {p}: {e}")
+
+    return embeddings
+
+
 def get_audio_embeddings(descriptor_dominance: ..., paths: Iterable[Path]):
     """
     Build normalized CLAP embeddings for each audio file in `paths`.
@@ -48,14 +68,16 @@ def get_audio_embeddings(descriptor_dominance: ..., paths: Iterable[Path]):
                 emb = model.get_audio_embedding_from_data(wav, use_tensor=True)
                 emb = F.normalize(emb, p=2, dim=-1).squeeze(0).cpu().tolist()
 
-                embeddings.append({
-                    "id": audio_id,
-                    "audio_embedding": emb,
-                    "sweet_rate": float(rates["sweet_rate"]),
-                    "bitter_rate": float(rates["bitter_rate"]),
-                    "sour_rate": float(rates["sour_rate"]),
-                    "salty_rate": float(rates["salty_rate"]),
-                })
+                embeddings.append(
+                    {
+                        "id": audio_id,
+                        "audio_embedding": emb,
+                        "sweet_rate": float(rates["sweet_rate"]),
+                        "bitter_rate": float(rates["bitter_rate"]),
+                        "sour_rate": float(rates["sour_rate"]),
+                        "salty_rate": float(rates["salty_rate"]),
+                    }
+                )
             except Exception as e:
                 logger.error(f"Failed embedding {p}: {e}")
 
@@ -75,7 +97,10 @@ def _find_audio_files(root: Path) -> list[Path]:
     exts = {".wav", ".mp3"}
     return sorted(
         (p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in exts),
-        key=lambda p: (p.parent.as_posix(), int(p.stem) if p.stem.isdigit() else p.stem.lower()),
+        key=lambda p: (
+            p.parent.as_posix(),
+            int(p.stem) if p.stem.isdigit() else p.stem.lower(),
+        ),
     )
 
 
@@ -85,6 +110,4 @@ if __name__ == "__main__":
     descriptor_dominance = _load_guedes_descriptor_dominance()
     audios = _find_audio_files(root)
     rows = get_audio_embeddings(descriptor_dominance, audios)
-    pd.DataFrame(rows).to_csv(
-        "data/docs/guedes_audio_embeddings.csv", index=False
-    )
+    pd.DataFrame(rows).to_csv("data/docs/guedes_audio_embeddings.csv", index=False)

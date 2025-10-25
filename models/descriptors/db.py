@@ -2,9 +2,11 @@ import csv
 import json
 import logging
 import os
+from enum import Enum
 from typing import Iterable, Sequence
 
 import numpy as np
+
 from models.descriptors.spanio_captions import SpanioCaptionsEmbedding
 from psycopg import connect, sql
 from pydantic import BaseModel
@@ -18,8 +20,13 @@ DB_NAME = os.environ["DB_NAME"]
 
 AUDIO_DESCRIPTOR_TABLE_NAME = "audio_descriptors"
 GUEDES_AUDIO_TABLE_NAME = "guedes_audio_embeddings"
+RAG_AUDIO_TABLE_NAME = "rag_audio_embeddings"
 
-RUN_GUEDES = True
+
+class ExecutionOption(Enum):
+    INSERT_GUEDES_AUDIO_EMBEDDINGS = 1
+    INSERT_AUDIO_DESCRIPTORS = 2
+    INSERT_RAG_AUDIO_EMBEDDINGS = 3
 
 
 class AudioDescriptorItem(BaseModel):
@@ -34,6 +41,12 @@ class GuedesAudioDescriptorItem(BaseModel):
     bitter_rate: float
     sour_rate: float
     salty_rate: float
+
+
+class RAGAudioEmbeddingItem(BaseModel):
+    audio_id: str
+    filename: str
+    audio_embedding: list[float]
 
 
 def get_conn():
@@ -78,6 +91,20 @@ def create_audio_guedes_table() -> None:
         cursor.execute(create_tbl)
 
 
+def create_rag_audio_table() -> None:
+    with get_conn().cursor() as cursor:
+        cursor.execute("create extension if not exists vector;")
+
+        create_rag_table = sql.SQL("""
+        create table if not exists {table_name} (
+            audio_id text primary key,
+            filename text unique not null,
+            embedding vector(512) not null
+        )""").format(table_name=sql.Identifier(RAG_AUDIO_TABLE_NAME))
+
+        cursor.execute(create_rag_table)
+
+
 def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
     """
     Load items from data/docs/guedes_audio_embeddings.csv
@@ -104,7 +131,9 @@ def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
                 sour = float(row["sour_rate"])
                 salty = float(row["salty_rate"])
             except Exception as e:
-                logger.error(f"Skipping row due to parse error for audio_id={audio_id}: {e}")
+                logger.error(
+                    f"Skipping row due to parse error for audio_id={audio_id}: {e}"
+                )
                 continue
 
             items.append(
@@ -121,7 +150,9 @@ def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
     return items
 
 
-def insert_guedes_audio_descriptor_items(items: list[GuedesAudioDescriptorItem]) -> bool:
+def insert_guedes_audio_descriptor_items(
+    items: list[GuedesAudioDescriptorItem],
+) -> bool:
     """
     Insert Guedes items into guedes_audio_embeddings.
     Uses ON CONFLICT DO NOTHING so the script can be re-run safely.
@@ -144,7 +175,9 @@ def insert_guedes_audio_descriptor_items(items: list[GuedesAudioDescriptorItem])
                 values (%s, %s, %s, %s, %s, %s)
             """).format(tbl=sql.Identifier(GUEDES_AUDIO_TABLE_NAME))
             cursor.executemany(insert_sql, params)
-            logger.info(f"Inserted {cursor.rowcount} rows into {GUEDES_AUDIO_TABLE_NAME}.")
+            logger.info(
+                f"Inserted {cursor.rowcount} rows into {GUEDES_AUDIO_TABLE_NAME}."
+            )
         return True
     except Exception as e:
         logger.error(f"Error inserting Guedes audio embeddings: {e}")
@@ -163,6 +196,25 @@ def insert_audio_descriptors(
         insert_sql = sql.SQL("""
             insert into {tbl} (caption, embedding)
             values (%s, %s) 
+        """).format(tbl=sql.Identifier(table_name))
+
+        cursor.executemany(insert_sql, params)
+        inserted = cursor.rowcount
+
+    return inserted
+
+
+def insert_rag_audio_embeddings(
+    items: Iterable[RAGAudioEmbeddingItem],
+    table_name: str = RAG_AUDIO_TABLE_NAME
+) -> int:
+    params: Sequence[tuple[str, str, list[float]]] = [
+        (it.audio_id, it.filename, it.audio_embedding) for it in items
+    ]
+    with get_conn().cursor() as cursor:
+        insert_sql = sql.SQL("""
+            insert into {tbl} (audio_id, filename, embedding)
+            values (%s, %s, %s) 
         """).format(tbl=sql.Identifier(table_name))
 
         cursor.executemany(insert_sql, params)
@@ -192,6 +244,19 @@ def load_audio_descriptor_items() -> list[AudioDescriptorItem]:
     return audio_caps_items
 
 
+def load_rag_audio_embeddings() -> list[RAGAudioEmbeddingItem]:
+    audio_emb_filepath = os.getcwd() + "/data/docs/rag_audio_embeddings.csv"
+    with open(audio_emb_filepath, "r") as f:
+        csv_reader = csv.DictReader(f)
+        return [
+            RAGAudioEmbeddingItem(
+                audio_id=str(pos),
+                filename=item["audio_id"],
+                audio_embedding=json.loads(item["embedding"])
+            )
+            for pos, item in enumerate(csv_reader, start=1)]
+
+
 def insert_audio_descriptor_items(audio_caps_items: list[AudioDescriptorItem]) -> bool:
     try:
         insert_audio_descriptors(audio_caps_items)
@@ -212,12 +277,12 @@ def get_top_k_audio_captions(
             """
             select 
                 caption,
-                1- (embedding <=> %(embedding)s) as sim
+                embedding <=> %(embedding)s::vector as sim
             from audio_descriptors
-            order by embedding <=> %(embedding)s 
+            order by embedding <=> %(embedding)s::vector
             limit %(limit)s
             """,
-            params={"embedding": caption_embedding, "limit": k},
+            {"embedding": caption_embedding["embedding"], "limit": k},
         )
 
         results: dict[str, float] = {caption: sim for caption, sim in cursor.fetchall()}
@@ -225,23 +290,33 @@ def get_top_k_audio_captions(
     return results
 
 
-def test():
-    create_audio_descriptors_table()
-    insert_audio_descriptors(
-        [
-            AudioDescriptorItem(caption="caption2", clap_embedding=[1.0] * 512),
-            AudioDescriptorItem(caption="caption3", clap_embedding=[3.0] * 512),
-            AudioDescriptorItem(caption="caption4", clap_embedding=[2.0] * 512),
-        ]
-    )
+# def test():
+#     create_audio_descriptors_table()
+#     insert_audio_descriptors(
+#         [
+#             AudioDescriptorItem(caption="caption2", clap_embedding=[1.0] * 512),
+#             AudioDescriptorItem(caption="caption3", clap_embedding=[3.0] * 512),
+#             AudioDescriptorItem(caption="caption4", clap_embedding=[2.0] * 512),
+#         ]
+#     )
 
 
 if __name__ == "__main__":
-    if RUN_GUEDES:
-        create_audio_guedes_table()
-        guedes_items = load_guedes_audio_descriptor_items()
-        insert_guedes_audio_descriptor_items(guedes_items)
-    else:
-        create_audio_descriptors_table()
-        reading_items = load_audio_descriptor_items()
-        insert_audio_descriptor_items(reading_items)
+    # set manual option
+    option = ExecutionOption.INSERT_RAG_AUDIO_EMBEDDINGS
+
+    match option:
+        case ExecutionOption.INSERT_GUEDES_AUDIO_EMBEDDINGS:
+            create_audio_guedes_table()
+            guedes_items = load_guedes_audio_descriptor_items()
+            insert_guedes_audio_descriptor_items(guedes_items)
+
+        case ExecutionOption.INSERT_AUDIO_DESCRIPTORS:
+            create_audio_descriptors_table()
+            reading_items = load_audio_descriptor_items()
+            insert_audio_descriptor_items(reading_items)
+
+        case ExecutionOption.INSERT_RAG_AUDIO_EMBEDDINGS:
+            create_rag_audio_table()
+            items = load_rag_audio_embeddings()
+            insert_rag_audio_embeddings(items)
