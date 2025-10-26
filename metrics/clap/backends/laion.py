@@ -15,11 +15,15 @@ class LaionBackend:
         try:
             from laion_clap import CLAP_Module  # type: ignore
         except Exception as e:
-            raise BackendUnavailable("Install `laion-clap` to use laion_module backend.") from e
+            raise BackendUnavailable(
+                "Install `laion-clap` to use laion_module backend."
+            ) from e
         self.model = CLAP_Module(enable_fusion=True)
         self.model.load_ckpt()
         self.model.eval().to(self.device)
-        if not self.model.training and not self.model.training:  # double-check eval mode
+        if (
+            not self.model.training and not self.model.training
+        ):  # double-check eval mode
             pass
         else:
             raise BackendUnavailable("CLAP_Module not in eval mode after load_ckpt().")
@@ -39,3 +43,21 @@ class LaionBackend:
             val = torch.nn.functional.cosine_similarity(aemb, temb).item()
             out.append(CLAPScored(item=it, clap_score=float(np.round(val, 6))))
         return out
+
+    def get_audio_embedding_from_data(self, audio_tensor, use_tensor=True):
+        """
+        Extrae embeddings del modelo CLAP de LAION a partir de datos de audio.
+        """
+        with torch.no_grad():
+            emb = self.model.get_audio_embedding_from_data(
+                audio_tensor, use_tensor=use_tensor
+            )
+        return emb
+
+    def get_text_embedding(self, texts, use_tensor=True):
+        """
+        Extrae embeddings del modelo CLAP de LAION a partir de descripciones de texto.
+        """
+        with torch.no_grad():
+            emb = self.model.get_text_embedding(texts, use_tensor=use_tensor)
+        return emb
