@@ -21,12 +21,14 @@ DB_NAME = os.environ["DB_NAME"]
 AUDIO_DESCRIPTOR_TABLE_NAME = "audio_descriptors"
 GUEDES_AUDIO_TABLE_NAME = "guedes_audio_embeddings"
 RAG_AUDIO_TABLE_NAME = "rag_audio_embeddings"
+BASE_PROMPT_EMBEDDINGS_TABLE_NAME = "base_prompt_embeddings"
 
 
 class ExecutionOption(Enum):
     INSERT_GUEDES_AUDIO_EMBEDDINGS = 1
     INSERT_AUDIO_DESCRIPTORS = 2
     INSERT_RAG_AUDIO_EMBEDDINGS = 3
+    INSERT_BASE_PROMPT_EMBEDDINGS = 4
 
 
 class AudioDescriptorItem(BaseModel):
@@ -49,6 +51,15 @@ class RAGAudioEmbeddingItem(BaseModel):
     audio_embedding: list[float]
 
 
+class BasePromptEmbeddingItem(BaseModel):
+    taste: str
+    description: str
+    audio_name: str
+    clap_score: float
+    audio_embedding: list[float]
+    text_embedding: list[float]
+
+
 def get_conn():
     return connect(
         f"dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD} host={DB_HOST}",
@@ -60,12 +71,14 @@ def create_audio_descriptors_table() -> None:
     with get_conn().cursor() as cursor:
         cursor.execute("create extension if not exists vector;")
 
-        create_ad_table = sql.SQL("""
+        create_ad_table = sql.SQL(
+            """
         create table if not exists {table_name} (
             id bigserial primary key,
             caption text unique not null,
             embedding vector(512) not null
-        )""").format(table_name=sql.Identifier(AUDIO_DESCRIPTOR_TABLE_NAME))
+        )"""
+        ).format(table_name=sql.Identifier(AUDIO_DESCRIPTOR_TABLE_NAME))
 
         cursor.execute(create_ad_table)
 
@@ -78,7 +91,8 @@ def create_audio_guedes_table() -> None:
     """
     with get_conn().cursor() as cursor:
         cursor.execute("create extension if not exists vector;")
-        create_tbl = sql.SQL("""
+        create_tbl = sql.SQL(
+            """
         create table if not exists {table_name} (
             audio_id text primary key,
             embedding vector(512) not null,
@@ -87,7 +101,8 @@ def create_audio_guedes_table() -> None:
             sour_rate real not null,
             salty_rate real not null
         )
-        """).format(table_name=sql.Identifier(GUEDES_AUDIO_TABLE_NAME))
+        """
+        ).format(table_name=sql.Identifier(GUEDES_AUDIO_TABLE_NAME))
         cursor.execute(create_tbl)
 
 
@@ -95,14 +110,37 @@ def create_rag_audio_table() -> None:
     with get_conn().cursor() as cursor:
         cursor.execute("create extension if not exists vector;")
 
-        create_rag_table = sql.SQL("""
+        create_rag_table = sql.SQL(
+            """
         create table if not exists {table_name} (
             audio_id text primary key,
             filename text unique not null,
             embedding vector(512) not null
-        )""").format(table_name=sql.Identifier(RAG_AUDIO_TABLE_NAME))
+        )"""
+        ).format(table_name=sql.Identifier(RAG_AUDIO_TABLE_NAME))
 
         cursor.execute(create_rag_table)
+
+
+def create_base_prompt_embeddings_table() -> None:
+    with get_conn().cursor() as cursor:
+        cursor.execute("create extension if not exists vector;")
+
+        create_table = sql.SQL(
+            """
+        create table if not exists {table_name} (
+            id bigserial primary key,
+            taste text not null,
+            description text not null,
+            audio_name text not null,
+            clap_score real,
+            audio_embedding vector(512),
+            text_embedding vector(512)
+        )
+        """
+        ).format(table_name=sql.Identifier(BASE_PROMPT_EMBEDDINGS_TABLE_NAME))
+
+        cursor.execute(create_table)
 
 
 def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
@@ -150,6 +188,41 @@ def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
     return items
 
 
+def load_base_prompt_embeddings() -> list[BasePromptEmbeddingItem]:
+    """
+    Carga los embeddings desde:
+    data/embeddings/music_base_prompts_embeddings.csv
+    """
+    file_path = os.path.join(
+        os.getcwd(), "data/embeddings/music_base_prompts_embeddings.csv"
+    )
+
+    items: list[BasePromptEmbeddingItem] = []
+
+    with open(file_path, "r") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                audio_emb = [float(x) for x in json.loads(row["audio_emb"])]
+                text_emb = [float(x) for x in json.loads(row["text_emb"])]
+                clap_score = float(row["clap_score"])
+
+                item = BasePromptEmbeddingItem(
+                    taste=row["taste"],
+                    description=row["description"],
+                    audio_name=row["audio_name"],
+                    clap_score=clap_score,
+                    audio_embedding=audio_emb,
+                    text_embedding=text_emb,
+                )
+                items.append(item)
+            except Exception as e:
+                logger.warning(f"Error procesando fila: {e}")
+
+    logger.info(f"Cargados {len(items)} embeddings de base_prompts.")
+    return items
+
+
 def insert_guedes_audio_descriptor_items(
     items: list[GuedesAudioDescriptorItem],
 ) -> bool:
@@ -170,10 +243,12 @@ def insert_guedes_audio_descriptor_items(
             for it in items
         ]
         with get_conn().cursor() as cursor:
-            insert_sql = sql.SQL("""
+            insert_sql = sql.SQL(
+                """
                 insert into {tbl} (audio_id, embedding, sweet_rate, bitter_rate, sour_rate, salty_rate)
                 values (%s, %s, %s, %s, %s, %s)
-            """).format(tbl=sql.Identifier(GUEDES_AUDIO_TABLE_NAME))
+            """
+            ).format(tbl=sql.Identifier(GUEDES_AUDIO_TABLE_NAME))
             cursor.executemany(insert_sql, params)
             logger.info(
                 f"Inserted {cursor.rowcount} rows into {GUEDES_AUDIO_TABLE_NAME}."
@@ -193,10 +268,12 @@ def insert_audio_descriptors(
         (it.caption, it.clap_embedding) for it in items
     ]
     with get_conn().cursor() as cursor:
-        insert_sql = sql.SQL("""
+        insert_sql = sql.SQL(
+            """
             insert into {tbl} (caption, embedding)
             values (%s, %s) 
-        """).format(tbl=sql.Identifier(table_name))
+        """
+        ).format(tbl=sql.Identifier(table_name))
 
         cursor.executemany(insert_sql, params)
         inserted = cursor.rowcount
@@ -205,21 +282,57 @@ def insert_audio_descriptors(
 
 
 def insert_rag_audio_embeddings(
-    items: Iterable[RAGAudioEmbeddingItem],
-    table_name: str = RAG_AUDIO_TABLE_NAME
+    items: Iterable[RAGAudioEmbeddingItem], table_name: str = RAG_AUDIO_TABLE_NAME
 ) -> int:
     params: Sequence[tuple[str, str, list[float]]] = [
         (it.audio_id, it.filename, it.audio_embedding) for it in items
     ]
     with get_conn().cursor() as cursor:
-        insert_sql = sql.SQL("""
+        insert_sql = sql.SQL(
+            """
             insert into {tbl} (audio_id, filename, embedding)
             values (%s, %s, %s) 
-        """).format(tbl=sql.Identifier(table_name))
+        """
+        ).format(tbl=sql.Identifier(table_name))
 
         cursor.executemany(insert_sql, params)
         inserted = cursor.rowcount
 
+    return inserted
+
+
+def insert_base_prompt_embeddings(
+    items: list[BasePromptEmbeddingItem],
+    table_name: str = BASE_PROMPT_EMBEDDINGS_TABLE_NAME,
+) -> int:
+    """
+    Inserta los embeddings de base_prompts en la tabla base_prompt_embeddings.
+    """
+    params = [
+        (
+            it.taste,
+            it.description,
+            it.audio_name,
+            it.clap_score,
+            it.audio_embedding,
+            it.text_embedding,
+        )
+        for it in items
+    ]
+
+    with get_conn().cursor() as cursor:
+        insert_sql = sql.SQL(
+            """
+            insert into {tbl} 
+            (taste, description, audio_name, clap_score, audio_embedding, text_embedding)
+            values (%s, %s, %s, %s, %s, %s)
+        """
+        ).format(tbl=sql.Identifier(table_name))
+
+        cursor.executemany(insert_sql, params)
+        inserted = cursor.rowcount
+
+    logger.info(f"Inserted {inserted} base prompt embeddings.")
     return inserted
 
 
@@ -252,9 +365,10 @@ def load_rag_audio_embeddings() -> list[RAGAudioEmbeddingItem]:
             RAGAudioEmbeddingItem(
                 audio_id=str(pos),
                 filename=item["audio_id"],
-                audio_embedding=json.loads(item["embedding"])
+                audio_embedding=json.loads(item["embedding"]),
             )
-            for pos, item in enumerate(csv_reader, start=1)]
+            for pos, item in enumerate(csv_reader, start=1)
+        ]
 
 
 def insert_audio_descriptor_items(audio_caps_items: list[AudioDescriptorItem]) -> bool:
@@ -303,7 +417,7 @@ def get_top_k_audio_captions(
 
 if __name__ == "__main__":
     # set manual option
-    option = ExecutionOption.INSERT_RAG_AUDIO_EMBEDDINGS
+    option = ExecutionOption.INSERT_BASE_PROMPT_EMBEDDINGS
 
     match option:
         case ExecutionOption.INSERT_GUEDES_AUDIO_EMBEDDINGS:
@@ -320,3 +434,8 @@ if __name__ == "__main__":
             create_rag_audio_table()
             items = load_rag_audio_embeddings()
             insert_rag_audio_embeddings(items)
+
+        case ExecutionOption.INSERT_BASE_PROMPT_EMBEDDINGS:
+            create_base_prompt_embeddings_table()
+            items = load_base_prompt_embeddings()
+            insert_base_prompt_embeddings(items)
