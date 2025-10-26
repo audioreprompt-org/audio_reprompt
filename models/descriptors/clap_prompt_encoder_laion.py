@@ -5,8 +5,11 @@ import torch
 import torch.nn.functional as F
 import torch.hub
 
+from metrics import set_reproducibility
+
+set_reproducibility(42)
+
 from metrics.clap.factory import _make_backend
-from models.descriptors.model import clap_model
 from models.descriptors.spanio_captions import load_spanio_captions
 
 logger = logging.getLogger(__name__)

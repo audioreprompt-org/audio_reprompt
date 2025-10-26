@@ -5,10 +5,15 @@ import torch
 import torch.nn.functional as F
 import torch.hub
 
+from metrics import set_reproducibility
+
+set_reproducibility(42)
+
 from models.descriptors.model import clap_model
 from models.descriptors.spanio_captions import load_spanio_captions
 
 logger = logging.getLogger(__name__)
+
 
 
 def get_text_embeddings_in_batches(descriptors: list[str], batch_size: int = 16):
