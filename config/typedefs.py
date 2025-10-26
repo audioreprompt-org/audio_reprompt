@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-
 # Configuration data classes for type safety and auto-completion
 @dataclass
 class DataConfig:
@@ -16,6 +15,7 @@ class DataConfig:
     data_docs_path: str
     data_prompts_path: str
     data_clap_path: str
+    embeddings_csv_path: str
     batch_size: int
     max_audio_length: int
     sample_rate: int
