@@ -215,3 +215,6 @@ __marimo__/
 terraform/stacks/apps_base/.tfplan
 terraform/stacks/apps_base/.terraform.lock.hcl
 terraform/stacks/apps_base/.terraform/
+
+# Mac OS specific
+.DS_Store
