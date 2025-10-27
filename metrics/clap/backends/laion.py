@@ -1,63 +1,60 @@
 from typing import Iterable
-import numpy as np
 import torch
-import torchaudio
-
-from metrics.clap.types import CLAPItem, CLAPScored, TARGET_SR
-from metrics.clap.backends.base import BackendUnavailable, _resolve_device
+import torch.nn.functional as F
 
 
-class LaionBackend:
+from metrics.clap.types import CLAPItem, CLAPScored
+from metrics.clap.backends.base import (
+    BackendUnavailable,
+    compute_scores_with_embeddings,
+    BaseBackend,
+)
+
+from utils.device import resolve_device
+
+
+WEIGHTS_URL = "https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt"
+
+
+class LaionBackend(BaseBackend):
     name = "laion_module"
 
+
     def __init__(self, device: str) -> None:
-        self.device = _resolve_device(device)
+        self.device = resolve_device(device)
         try:
-            from laion_clap import CLAP_Module  # type: ignore
+            from laion_clap import CLAP_Module
         except Exception as e:
             raise BackendUnavailable(
                 "Install `laion-clap` to use laion_module backend."
             ) from e
-        self.model = CLAP_Module(enable_fusion=True)
-        self.model.load_ckpt()
-        self.model.eval().to(self.device)
-        if (
-            not self.model.training and not self.model.training
-        ):  # double-check eval mode
-            pass
-        else:
-            raise BackendUnavailable("CLAP_Module not in eval mode after load_ckpt().")
+        self.model = CLAP_Module(enable_fusion=False)
+
+        state_dict = torch.hub.load_state_dict_from_url(
+            WEIGHTS_URL, map_location=device, weights_only=False
+        )
+
+        self.model.load_state_dict(state_dict, strict=False)
+        self.model.to(self.device)
+        self.model.eval()
+
+
+    @torch.no_grad()
+    def embed_audio(self, audio_tensor: torch.Tensor) -> torch.Tensor:
+        return F.normalize(
+            input=self.model.get_audio_embedding_from_data(audio_tensor, use_tensor=True),
+            p=2,
+            dim=-1
+        ).squeeze(0)
+
+    @torch.no_grad()
+    def embed_text(self, text: str) -> torch.Tensor:
+        return F.normalize(
+            input=self.model.get_text_embedding([text], use_tensor=True),
+            p=2,
+            dim=-1
+        ).squeeze(0)
 
     @torch.no_grad()
     def score_batch(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:
-        out: list[CLAPScored] = []
-        for it in items:
-            wav, sr = torchaudio.load(it.audio_path)
-            if sr != TARGET_SR:
-                wav = torchaudio.functional.resample(wav, sr, TARGET_SR)
-            wav = wav.to(self.device)
-            aemb = self.model.get_audio_embedding_from_data(wav, use_tensor=True)
-            temb = self.model.get_text_embedding([it.description], use_tensor=True)
-            aemb = torch.nn.functional.normalize(aemb, dim=-1)
-            temb = torch.nn.functional.normalize(temb, dim=-1)
-            val = torch.nn.functional.cosine_similarity(aemb, temb).item()
-            out.append(CLAPScored(item=it, clap_score=float(np.round(val, 6))))
-        return out
-
-    def get_audio_embedding_from_data(self, audio_tensor, use_tensor=True):
-        """
-        Extrae embeddings del modelo CLAP de LAION a partir de datos de audio.
-        """
-        with torch.no_grad():
-            emb = self.model.get_audio_embedding_from_data(
-                audio_tensor, use_tensor=use_tensor
-            )
-        return emb
-
-    def get_text_embedding(self, texts, use_tensor=True):
-        """
-        Extrae embeddings del modelo CLAP de LAION a partir de descripciones de texto.
-        """
-        with torch.no_grad():
-            emb = self.model.get_text_embedding(texts, use_tensor=use_tensor)
-        return emb
+        return compute_scores_with_embeddings(self, items)
