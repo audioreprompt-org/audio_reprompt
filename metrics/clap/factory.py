@@ -122,7 +122,7 @@ def calculate_scores_with_embeddings(
     t = torch.nn.functional.normalize(t, dim=-1)
     sims = (a * t).sum(dim=-1)
 
-    return sims.detach().cpu().tolist()
+    return sims.squeeze(-1).detach().cpu().tolist()
 
 
 def get_audio_embeddings_from_paths(

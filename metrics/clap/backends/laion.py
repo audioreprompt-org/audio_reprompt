@@ -35,31 +35,24 @@ class LaionBackend(BaseBackend):
 
         # Allow toggling fusion and swapping weights
         self.model = CLAP_Module(enable_fusion=enable_fusion)
+        self.weights = weights or WEIGHTS_URL
 
         state_dict = torch.hub.load_state_dict_from_url(
-            weights or WEIGHTS_URL, map_location=device, weights_only=False
+            self.weights, map_location=device, weights_only=False
         )
 
-        # strict=False to be tolerant to minor naming/shape diffs across checkpoints
         self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device)
         self.model.eval()
 
+
     @torch.no_grad()
     def embed_audio(self, audio_tensor: torch.Tensor) -> torch.Tensor:
-        return F.normalize(
-            input=self.model.get_audio_embedding_from_data(audio_tensor, use_tensor=True),
-            p=2,
-            dim=-1,
-        ).squeeze(0)
+        return self.model.get_audio_embedding_from_data(audio_tensor, use_tensor=True)
 
     @torch.no_grad()
     def embed_text(self, text: str) -> torch.Tensor:
-        return F.normalize(
-            input=self.model.get_text_embedding([text], use_tensor=True),
-            p=2,
-            dim=-1,
-        ).squeeze(0)
+        return self.model.get_text_embedding([text], use_tensor=True)
 
     @torch.no_grad()
     def score_batch(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:
