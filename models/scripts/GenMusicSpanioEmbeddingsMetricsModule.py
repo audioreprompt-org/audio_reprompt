@@ -25,11 +25,11 @@ config = load_config()
 
 tracks_base_data_path = PROJECT_ROOT / config.data.tracks_base_data_path
 data_clap_path = (
-        PROJECT_ROOT / config.data.data_clap_path / "results_with_clap_base_prompts.csv"
+        PROJECT_ROOT / config.data.data_clap_path / "results_with_clap_base_prompts_default_weights_disabled_fusion.csv"
 )
 
 embeddings_csv_path = (
-        PROJECT_ROOT / config.data.embeddings_csv_path / "music_base_prompts_embeddings.csv"
+        PROJECT_ROOT / config.data.embeddings_csv_path / "music_base_prompts_embeddings_default_weights_disabled_fusion.csv"
 )
 
 
@@ -55,8 +55,8 @@ def compute_clap_scores(
     texts = [r.description for r in results]
 
     # 2) Obtener embeddings en batch (una sola llamada por tipo)
-    audio_emb_list = get_audio_embeddings_from_paths(audio_paths, device, backend=backend, backend_cfg={"enable_fusion": True})
-    text_emb_list  = get_text_embeddings(texts, device, backend=backend, backend_cfg={"enable_fusion": True})
+    audio_emb_list = get_audio_embeddings_from_paths(audio_paths, device, backend=backend, backend_cfg={"enable_fusion": False})
+    text_emb_list  = get_text_embeddings(texts, device, backend=backend, backend_cfg={"enable_fusion": False})
 
     # 3) Calcular similitudes con el helper (vectorizado)
     sims = calculate_scores_with_embeddings(audio_emb_list, text_emb_list)
