@@ -49,28 +49,35 @@ def _normalize_key(backend: Optional[str]) -> str:
     return (backend or "").strip().lower()
 
 
-def _make_backend(backend: str, device: Optional[str]):
+def _make_backend(backend: str, device: Optional[str], backend_cfg: Optional[dict] = None):
     key = _normalize_key(backend)
     if key not in _BACKENDS:
         raise ValueError(f"Unknown backend '{backend}'. Available: {', '.join(_BACKENDS.keys())}")
     try:
+        # Pass config only to backends that accept it (LaionBackend does).
+        if key == LaionBackend.name:
+            return _BACKENDS[key](device=device or "auto", **(backend_cfg or {}))
         return _BACKENDS[key](device=device or "auto")
     except BackendUnavailable as e:
         raise RuntimeError(f"Backend '{backend}' unavailable: {e}") from e
 
 
-def _get_backend(backend: str, device: Optional[str]):
+
+def _get_backend(backend: str, device: Optional[str], backend_cfg: Optional[dict] = None):
     """
-    Return the singleton backend. Re-create ONLY if backend name changes.
+    Return the singleton backend. Re-create when backend name OR backend_cfg changes.
     Device changes are ignored after the first initialization to keep it simple.
     """
+    import json
+
     global _BACKEND_SINGLETON, _BACKEND_CURRENT_KEY
 
     key = _normalize_key(backend)
-    if (_BACKEND_SINGLETON is None) or (_BACKEND_CURRENT_KEY != key):
-        # (Re)create only when backend name changes
-        _BACKEND_SINGLETON = _make_backend(backend, device)
-        _BACKEND_CURRENT_KEY = key
+    cfg_sig = json.dumps(backend_cfg or {}, sort_keys=True, ensure_ascii=False)
+    cache_key = f"{key}|cfg:{cfg_sig}"
+    if (_BACKEND_SINGLETON is None) or (_BACKEND_CURRENT_KEY != cache_key):
+        _BACKEND_SINGLETON = _make_backend(backend, device, backend_cfg=backend_cfg)
+        _BACKEND_CURRENT_KEY = cache_key
     return _BACKEND_SINGLETON
 
 
@@ -79,8 +86,9 @@ def calculate_scores(
     device: Optional[str] = None,
     *,
     backend: str = "laion_module",
+    backend_cfg: Optional[dict] = None,
 ) -> list[CLAPScored]:
-    be = _get_backend(backend, device)
+    be = _get_backend(backend, device, backend_cfg=backend_cfg)
     return be.score_batch(items)
 
 
@@ -122,9 +130,10 @@ def get_audio_embeddings_from_paths(
     device: Optional[str] = None,
     *,
     backend: str = "laion_module",
+    backend_cfg: Optional[dict] = None,
 ) -> list[torch.Tensor]:
     device = resolve_device(device)
-    model = _get_backend(backend, device)
+    model = _get_backend(backend, device, backend_cfg=backend_cfg)
     embeddings: list[torch.Tensor] = []
     for audio_path in audio_paths:
         audio_tensor = load_audio_tensor(audio_path, TARGET_SR).to(device)
@@ -138,9 +147,10 @@ def get_text_embeddings(
     device: Optional[str] = None,
     *,
     backend: str = "laion_module",
+    backend_cfg: Optional[dict] = None,
 ) -> list[torch.Tensor]:
     device = resolve_device(device)
-    model = _get_backend(backend, device)
+    model = _get_backend(backend, device, backend_cfg=backend_cfg)
     embeddings: list[torch.Tensor] = []
     for text in texts:
         emb = model.embed_text(text)
