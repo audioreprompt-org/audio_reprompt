@@ -41,6 +41,8 @@ class LaionBackend(BaseBackend):
                 weights, map_location=device, weights_only=False
             )
             self.model.load_state_dict(state_dict, strict=False)
+        else:
+            self.model.load_ckpt()
 
         self.model.to(self.device)
         self.model.eval()
