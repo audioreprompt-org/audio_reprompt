@@ -1,63 +1,61 @@
-from typing import Iterable
-import numpy as np
+from typing import Iterable, Optional
 import torch
-import torchaudio
+import torch.nn.functional as F
 
-from metrics.clap.types import CLAPItem, CLAPScored, TARGET_SR
-from metrics.clap.backends.base import BackendUnavailable, _resolve_device
+from metrics.clap.types import CLAPItem, CLAPScored
+from metrics.clap.backends.base import (
+    BackendUnavailable,
+    compute_scores_with_embeddings,
+    BaseBackend,
+)
+from utils.device import resolve_device
+
+MUSICGEN_WEIGHTS_URL = "https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt"
 
 
-class LaionBackend:
+class LaionBackend(BaseBackend):
     name = "laion_module"
 
-    def __init__(self, device: str) -> None:
-        self.device = _resolve_device(device)
+    def __init__(self, device: str, *, enable_fusion: bool = False, weights: Optional[str] = None) -> None:
+        """
+        Initialize LAION-CLAP backend.
+
+        Args:
+            device: "cpu", "cuda", or "auto"
+            enable_fusion: Whether to enable the CLAP_Module fusion mode.
+            weights: Path or URL to a custom checkpoint. If None, uses default WEIGHTS_URL.
+                     - If it looks like http(s)://, it will be downloaded via torch.hub.
+                     - Otherwise, it's treated as a local file path.
+        """
+        self.device = resolve_device(device)
         try:
             from laion_clap import CLAP_Module  # type: ignore
         except Exception as e:
-            raise BackendUnavailable(
-                "Install `laion-clap` to use laion_module backend."
-            ) from e
-        self.model = CLAP_Module(enable_fusion=True)
-        self.model.load_ckpt()
-        self.model.eval().to(self.device)
-        if (
-            not self.model.training and not self.model.training
-        ):  # double-check eval mode
-            pass
+            raise BackendUnavailable("Install `laion-clap` to use laion_module backend.") from e
+
+        # Allow toggling fusion and swapping weights
+        self.model = CLAP_Module(enable_fusion=enable_fusion)
+
+        if weights:
+            state_dict = torch.hub.load_state_dict_from_url(
+                weights, map_location=device, weights_only=False
+            )
+            self.model.load_state_dict(state_dict, strict=False)
         else:
-            raise BackendUnavailable("CLAP_Module not in eval mode after load_ckpt().")
+            self.model.load_ckpt()
+
+        self.model.to(self.device)
+        self.model.eval()
+
+
+    @torch.no_grad()
+    def embed_audio(self, audio_tensor: torch.Tensor) -> torch.Tensor:
+        return self.model.get_audio_embedding_from_data(audio_tensor, use_tensor=True)
+
+    @torch.no_grad()
+    def embed_text(self, text: str) -> torch.Tensor:
+        return self.model.get_text_embedding([text], use_tensor=True)
 
     @torch.no_grad()
     def score_batch(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:
-        out: list[CLAPScored] = []
-        for it in items:
-            wav, sr = torchaudio.load(it.audio_path)
-            if sr != TARGET_SR:
-                wav = torchaudio.functional.resample(wav, sr, TARGET_SR)
-            wav = wav.to(self.device)
-            aemb = self.model.get_audio_embedding_from_data(wav, use_tensor=True)
-            temb = self.model.get_text_embedding([it.description], use_tensor=True)
-            aemb = torch.nn.functional.normalize(aemb, dim=-1)
-            temb = torch.nn.functional.normalize(temb, dim=-1)
-            val = torch.nn.functional.cosine_similarity(aemb, temb).item()
-            out.append(CLAPScored(item=it, clap_score=float(np.round(val, 6))))
-        return out
-
-    def get_audio_embedding_from_data(self, audio_tensor, use_tensor=True):
-        """
-        Extrae embeddings del modelo CLAP de LAION a partir de datos de audio.
-        """
-        with torch.no_grad():
-            emb = self.model.get_audio_embedding_from_data(
-                audio_tensor, use_tensor=use_tensor
-            )
-        return emb
-
-    def get_text_embedding(self, texts, use_tensor=True):
-        """
-        Extrae embeddings del modelo CLAP de LAION a partir de descripciones de texto.
-        """
-        with torch.no_grad():
-            emb = self.model.get_text_embedding(texts, use_tensor=use_tensor)
-        return emb
+        return compute_scores_with_embeddings(self, items)

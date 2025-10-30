@@ -1,16 +1,16 @@
 import os
 import pandas as pd
-import numpy as np
 import json
-import random
 
 import torch
 import torchaudio
 from laion_clap import CLAP_Module
 from tqdm import tqdm
 
+
 from models.scripts.types import MusicGenCLAPResult, MusicGenData
 from config import load_config, setup_project_paths, PROJECT_ROOT
+from utils.seed import set_reproducibility
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Dispositivo: {DEVICE}")
@@ -31,32 +31,6 @@ embeddings_csv_path = (
     / config.data.embeddings_csv_path
     / "music_prompt_embeddings_normal_weights.csv"
 )
-
-
-def set_reproducibility(seed: int = 42):
-    """
-    Fija todas las semillas y configuraciones necesarias para que
-    los resultados (embeddings, scores, etc.) sean reproducibles en CLAP o PyTorch.
-    """
-    print(f"Estableciendo modo determinista con semilla {seed}")
-
-    # Python
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
-    # NumPy
-    np.random.seed(seed)
-
-    # PyTorch
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-    # Modo determinista completo (puede afectar rendimiento, pero asegura reproducibilidad)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.use_deterministic_algorithms(True, warn_only=True)
-
-    print("Semillas y modo determinista configurados.\n")
 
 
 def compute_clap_scores(

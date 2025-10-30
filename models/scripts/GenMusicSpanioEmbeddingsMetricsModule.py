@@ -1,18 +1,18 @@
 import os
 import pandas as pd
-import numpy as np
 import json
-import random
 
 import torch
-import torchaudio
-from tqdm import tqdm
 
+from metrics.clap import get_audio_embeddings_from_paths, get_text_embeddings
+from metrics.clap.backends.laion import MUSICGEN_WEIGHTS_URL
+from metrics.clap.factory import calculate_scores_with_embeddings
 from models.scripts.types import MusicGenCLAPResult, MusicGenData
 from config import load_config, setup_project_paths, PROJECT_ROOT
+from utils.device import resolve_device
 
-from metrics.clap.factory import calculate_scores, _make_backend
-from metrics.clap.types import CLAPItem
+from utils.seed import set_reproducibility
+
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Dispositivo: {DEVICE}")
@@ -25,38 +25,12 @@ config = load_config()
 
 tracks_base_data_path = PROJECT_ROOT / config.data.tracks_base_data_path
 data_clap_path = (
-    PROJECT_ROOT / config.data.data_clap_path / "results_with_clap_base_prompts.csv"
+        PROJECT_ROOT / config.data.data_clap_path / "results_with_clap_base_prompts.csv"
 )
 
 embeddings_csv_path = (
-    PROJECT_ROOT / config.data.embeddings_csv_path / "music_base_prompts_embeddings.csv"
+        PROJECT_ROOT / config.data.embeddings_csv_path / "music_base_prompts_embeddings.csv"
 )
-
-
-def set_reproducibility(seed: int = 42):
-    """
-    Fija todas las semillas y configuraciones necesarias para que
-    los resultados (embeddings, scores, etc.) sean reproducibles en CLAP o PyTorch.
-    """
-    print(f"Estableciendo modo determinista con semilla {seed}")
-
-    # Python
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
-    # NumPy
-    np.random.seed(seed)
-
-    # PyTorch
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-    # Modo determinista completo (puede afectar rendimiento, pero asegura reproducibilidad)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.use_deterministic_algorithms(True, warn_only=True)
-
-    print("Semillas y modo determinista configurados.\n")
 
 
 def compute_clap_scores(
@@ -67,86 +41,66 @@ def compute_clap_scores(
 ) -> list[MusicGenCLAPResult]:
     """
     Calcula el CLAP Score (similaridad texto-audio) usando embeddings del modelo CLAP.
+    Procesa TODOS los audios y textos de una sola vez y usa calculate_scores_with_embeddings.
     """
-
     set_reproducibility(42)
-    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device(device)
     print(f"\nUsando dispositivo: {device}\n")
 
-    clap_backend = _make_backend(backend, device)
-    if not hasattr(clap_backend, "get_audio_embedding_from_data"):
-        raise AttributeError(
-            f"El backend '{backend}' no soporta extracción directa de embeddings. "
-            "Usa un backend como 'laion_module' o 'hf_processor'."
+    if not results:
+        return []
+
+    # 1) Preparar listas en el mismo orden
+    audio_paths = [r.audio_path for r in results]
+    texts = [r.description for r in results]
+
+    # 2) Obtener embeddings en batch (una sola llamada por tipo)
+    audio_emb_list = get_audio_embeddings_from_paths(audio_paths, device, backend=backend, backend_cfg={"enable_fusion": True})
+    text_emb_list  = get_text_embeddings(texts, device, backend=backend, backend_cfg={"enable_fusion": True})
+
+    # 3) Calcular similitudes con el helper (vectorizado)
+    sims = calculate_scores_with_embeddings(audio_emb_list, text_emb_list)
+
+    # 4) Construir resultados (sin tocar embeddings aún)
+    scored: list[MusicGenCLAPResult] = []
+    for i, r in enumerate(results):
+        clap_score = round(float(sims[i]), 6)
+        scored.append(
+            MusicGenCLAPResult(
+                id=r.id,
+                taste=r.taste,
+                description=r.description,
+                instrument=r.instrument,
+                audio_path=r.audio_path,
+                clap_score=clap_score,
+            )
         )
 
-    print(f"Backend CLAP cargado: {backend}\n")
+    # 5) (Opcional) Guardar embeddings normalizados y scores
+    if save_embeddings:
+        a_norm = torch.nn.functional.normalize(torch.stack(audio_emb_list, dim=0), dim=-1)
+        t_norm = torch.nn.functional.normalize(torch.stack(text_emb_list, dim=0), dim=-1)
 
-    scored: list[MusicGenCLAPResult] = []
-    embedding_records = []
-
-    # 2. Iterar sobre los resultados
-    for r in tqdm(results, desc="Procesando audios", ncols=80):
-        try:
-            audio, sr = torchaudio.load(r.audio_path)
-            if sr != 48000:
-                audio = torchaudio.functional.resample(audio, sr, 48000)
-            audio = audio.to(device)
-
-            with torch.no_grad():
-                # Extraer embeddings del backend.
-                audio_emb = clap_backend.get_audio_embedding_from_data(
-                    audio, use_tensor=True
-                )
-                text_emb = clap_backend.get_text_embedding(
-                    [r.description], use_tensor=True
-                )
-
-                # Normalizar embeddings.
-                audio_emb = torch.nn.functional.normalize(audio_emb, dim=-1)
-                text_emb = torch.nn.functional.normalize(text_emb, dim=-1)
-
-                # Calcular similitud coseno.
-                score = torch.nn.functional.cosine_similarity(
-                    audio_emb, text_emb
-                ).item()
-
-            # Convertir a listas.
-            audio_emb_np = audio_emb.cpu().numpy().flatten().tolist()
-            text_emb_np = text_emb.cpu().numpy().flatten().tolist()
-
-            # Registrar resultados.
-            clap_score = round(float(score), 6)
-            scored.append(
-                MusicGenCLAPResult(
-                    id=r.id,
-                    taste=r.taste,
-                    description=r.description,
-                    instrument=r.instrument,
-                    audio_path=r.audio_path,
-                    clap_score=clap_score,
-                )
+        embedding_records = []
+        for i, r in enumerate(results):
+            audio_emb_np = a_norm[i].detach().cpu().numpy().flatten().tolist()
+            text_emb_np  = t_norm[i].detach().cpu().numpy().flatten().tolist()
+            embedding_records.append(
+                {
+                    "taste": r.taste,
+                    "description": r.description,
+                    "audio_name": r.id,
+                    "clap_score": scored[i].clap_score,
+                    "audio_emb": json.dumps(audio_emb_np),
+                    "text_emb": json.dumps(text_emb_np),
+                }
             )
 
-            if save_embeddings:
-                embedding_records.append(
-                    {
-                        "taste": r.taste,
-                        "description": r.description,
-                        "audio_name": r.id,
-                        "clap_score": clap_score,
-                        "audio_emb": json.dumps(audio_emb_np),
-                        "text_emb": json.dumps(text_emb_np),
-                    }
-                )
+        if embedding_records:
+            df = pd.DataFrame(embedding_records)
+            df.to_csv(embeddings_csv_path, index=False)
+            print(f"\n Embeddings y CLAP Scores guardados en: {embeddings_csv_path}\n")
 
-        except Exception as e:
-            print(f"Error procesando {r.id}: {e}")
-
-    if save_embeddings and embedding_records:
-        df = pd.DataFrame(embedding_records)
-        df.to_csv(embeddings_csv_path, index=False)
-        print(f"\n Embeddings y CLAP Scores guardados en: {embeddings_csv_path}\n")
     return scored
 
 

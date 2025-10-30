@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
 
 TARGET_SR = 48_000
 
@@ -18,3 +18,5 @@ class CLAPItem:
 class CLAPScored:
     item: CLAPItem
     clap_score: float
+    audio_embedding: Optional[List[float]] = None
+    text_embedding: Optional[List[float]] = None
