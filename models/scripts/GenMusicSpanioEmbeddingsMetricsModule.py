@@ -55,8 +55,8 @@ def compute_clap_scores(
     texts = [r.description for r in results]
 
     # 2) Obtener embeddings en batch (una sola llamada por tipo)
-    audio_emb_list = get_audio_embeddings_from_paths(audio_paths, device, backend=backend, backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL})
-    text_emb_list  = get_text_embeddings(texts, device, backend=backend, backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL})
+    audio_emb_list = get_audio_embeddings_from_paths(audio_paths, device, backend=backend, backend_cfg={"enable_fusion": True})
+    text_emb_list  = get_text_embeddings(texts, device, backend=backend, backend_cfg={"enable_fusion": True})
 
     # 3) Calcular similitudes con el helper (vectorizado)
     sims = calculate_scores_with_embeddings(audio_emb_list, text_emb_list)
