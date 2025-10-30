@@ -95,7 +95,6 @@ setup_project_paths()
 print("Cargando configuración...")
 config = load_config()
 
-data_docs_path = PROJECT_ROOT / config.data.data_docs_path / "descriptions.json"
 model_musicgen_path = PROJECT_ROOT / config.model.model_musicgen_path
 tracks_base_data_path = PROJECT_ROOT / config.data.tracks_base_data_path
 
