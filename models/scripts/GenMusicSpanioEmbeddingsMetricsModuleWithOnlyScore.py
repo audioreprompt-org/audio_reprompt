@@ -3,6 +3,7 @@ import pandas as pd
 
 import torch
 
+from metrics.clap.backends.laion import MUSICGEN_WEIGHTS_URL
 # ⬇️ We only need the batch scorer and CLAPItem (no embedding helpers)
 from metrics.clap.factory import calculate_scores
 from metrics.clap.types import CLAPItem
@@ -55,7 +56,7 @@ def compute_clap_scores(
     ]
 
     # 2) Calcular scores en batch con el backend seleccionado
-    scored_batch = calculate_scores(items, device=device, backend=backend)  # list[CLAPScored]
+    scored_batch = calculate_scores(items, device=device, backend=backend, backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL})  # list[CLAPScored]
 
     # 3) Mapear a MusicGenCLAPResult (redondeo y orden consistente)
     out: list[MusicGenCLAPResult] = []

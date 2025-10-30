@@ -10,7 +10,7 @@ from metrics.clap.backends.base import (
 )
 from utils.device import resolve_device
 
-WEIGHTS_URL = "https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt"
+MUSICGEN_WEIGHTS_URL = "https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt"
 
 
 class LaionBackend(BaseBackend):
@@ -35,13 +35,13 @@ class LaionBackend(BaseBackend):
 
         # Allow toggling fusion and swapping weights
         self.model = CLAP_Module(enable_fusion=enable_fusion)
-        self.weights = weights or WEIGHTS_URL
 
-        state_dict = torch.hub.load_state_dict_from_url(
-            self.weights, map_location=device, weights_only=False
-        )
+        if weights:
+            state_dict = torch.hub.load_state_dict_from_url(
+                weights, map_location=device, weights_only=False
+            )
+            self.model.load_state_dict(state_dict, strict=False)
 
-        self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device)
         self.model.eval()
 

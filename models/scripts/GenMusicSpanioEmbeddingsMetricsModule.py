@@ -5,6 +5,7 @@ import json
 import torch
 
 from metrics.clap import get_audio_embeddings_from_paths, get_text_embeddings
+from metrics.clap.backends.laion import MUSICGEN_WEIGHTS_URL
 from metrics.clap.factory import calculate_scores_with_embeddings
 from models.scripts.types import MusicGenCLAPResult, MusicGenData
 from config import load_config, setup_project_paths, PROJECT_ROOT
@@ -54,11 +55,11 @@ def compute_clap_scores(
     texts = [r.description for r in results]
 
     # 2) Obtener embeddings en batch (una sola llamada por tipo)
-    audio_emb_list = get_audio_embeddings_from_paths(audio_paths, device, backend=backend, backend_cfg={"enable_fusion": True})
-    text_emb_list  = get_text_embeddings(texts, device, backend=backend, backend_cfg={"enable_fusion": True})
+    audio_emb_list = get_audio_embeddings_from_paths(audio_paths, device, backend=backend, backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL})
+    text_emb_list  = get_text_embeddings(texts, device, backend=backend, backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL})
 
     # 3) Calcular similitudes con el helper (vectorizado)
-    sims = calculate_scores_with_embeddings(audio_emb_list, text_emb_list)  # List[float], len = N
+    sims = calculate_scores_with_embeddings(audio_emb_list, text_emb_list)
 
     # 4) Construir resultados (sin tocar embeddings aún)
     scored: list[MusicGenCLAPResult] = []
