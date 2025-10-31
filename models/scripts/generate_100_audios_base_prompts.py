@@ -8,29 +8,26 @@ from tqdm import tqdm
 from config import load_config, setup_project_paths, PROJECT_ROOT
 from models.scripts.types import MusicGenData
 
-base_prompts = [
-    "sweet music, ambient for fine restaurant",
-    "bitter music, ambient for fine restaurant",
-    "sour music, ambient for fine restaurant",
-    "salty music, ambient for fine restaurant",
-]
-
-variations_per_prompt = 25
-
 
 def generate_music_from_prompts(
-    synthesiser, output_dir="generated_music", sample_rate=32000
+    synthesiser,
+    base_prompts,
+    variations_per_prompt=25,
+    output_dir="generated_music",
+    sample_rate=32000,
 ) -> list[MusicGenData]:
     """
     Genera archivos de audio a partir de descripciones de texto usando el modelo tasty-musicgen-small.
 
     Parameters:
         synthesiser: Pipeline de Hugging Face para text-to-audio.
-        output_dir (str): Carpeta donde guardar los .wav generados.
-        sample_rate (int): Frecuencia de muestreo para los archivos de salida. MusicGen fue entrenado a 32 kHz.
+        base_prompts: Lista de prompts para generar música.
+        variations_per_prompt: Número de variaciones por prompt.
+        output_dir: Carpeta donde guardar los .wav generados.
+        sample_rate: Frecuencia de muestreo para los archivos de salida.
 
     Returns:
-        list[dict]: Lista con {'id', 'instrument', 'description', 'audio_path'} por cada generación.
+        list[MusicGenData]: Lista con datos de cada generación.
     """
     os.makedirs(output_dir, exist_ok=True)
     results: list[MusicGenData] = []
@@ -45,7 +42,7 @@ def generate_music_from_prompts(
         for i in tqdm(
             range(variations_per_prompt), desc="Generando variaciones", ncols=80
         ):
-            file_id = f"{taste_name}_{i+1:02d}"
+            file_id = f"{taste_name}_{i + 1:02d}"
             output_path = os.path.join(output_dir, f"{file_id}.wav")
 
             try:
@@ -71,9 +68,7 @@ def generate_music_from_prompts(
                 results.append(
                     MusicGenData(
                         id=file_id,
-                        taste=taste_name,
-                        instrument="N/A",
-                        description=taste_prompt,
+                        prompt=taste_prompt,
                         audio_path=output_path,
                     )
                 )
@@ -85,26 +80,40 @@ def generate_music_from_prompts(
     return results
 
 
-# Variables y constantes.
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Dispositivo: {DEVICE}")
-
-print("Configurando las rutas del proyecto...")
-setup_project_paths()
-
-print("Cargando configuración...")
-config = load_config()
-
-model_musicgen_path = PROJECT_ROOT / config.model.model_musicgen_path
-tracks_base_data_path = PROJECT_ROOT / config.data.tracks_base_data_path
-
 # Pipeline.
 if __name__ == "__main__":
+    # Variables y constantes.
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Dispositivo: {device}")
+
+    print("Configurando las rutas del proyecto...")
+    setup_project_paths()
+
+    print("Cargando configuración...")
+    config = load_config()
+
+    model_musicgen_path = PROJECT_ROOT / config.model.model_musicgen_path
+    tracks_base_data_path = PROJECT_ROOT / config.data.tracks_base_data_path
+
+    base_prompts = [
+        "sweet music, ambient for fine restaurant",
+        "bitter music, ambient for fine restaurant",
+        "sour music, ambient for fine restaurant",
+        "salty music, ambient for fine restaurant",
+    ]
+
+    variations_per_prompt = 25
+
     synthesiser = pipeline(
         "text-to-audio",
         model=model_musicgen_path,
-        device=DEVICE,
+        device=device,
         trust_remote_code=True,
     )
 
-    results = generate_music_from_prompts(synthesiser, tracks_base_data_path)
+    results = generate_music_from_prompts(
+        synthesiser,
+        base_prompts,
+        variations_per_prompt,
+        tracks_base_data_path,
+    )

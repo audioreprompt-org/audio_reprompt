@@ -25,11 +25,15 @@ config = load_config()
 
 tracks_base_data_path = PROJECT_ROOT / config.data.tracks_base_data_path
 data_clap_path = (
-        PROJECT_ROOT / config.data.data_clap_path / "results_with_clap_base_prompts_default_weights_disabled_fusion.csv"
+    PROJECT_ROOT
+    / config.data.data_clap_path
+    / "results_with_clap_base_prompts_audioset_weights_disabled_fusion.csv"
 )
 
 embeddings_csv_path = (
-        PROJECT_ROOT / config.data.embeddings_csv_path / "music_base_prompts_embeddings_default_weights_disabled_fusion.csv"
+    PROJECT_ROOT
+    / config.data.embeddings_csv_path
+    / "music_base_prompts_embeddings_audioset_weights_disabled_fusion.csv"
 )
 
 
@@ -52,11 +56,21 @@ def compute_clap_scores(
 
     # 1) Preparar listas en el mismo orden
     audio_paths = [r.audio_path for r in results]
-    texts = [r.description for r in results]
+    texts = [r.prompt for r in results]
 
     # 2) Obtener embeddings en batch (una sola llamada por tipo)
-    audio_emb_list = get_audio_embeddings_from_paths(audio_paths, device, backend=backend, backend_cfg={"enable_fusion": False})
-    text_emb_list  = get_text_embeddings(texts, device, backend=backend, backend_cfg={"enable_fusion": False})
+    audio_emb_list = get_audio_embeddings_from_paths(
+        audio_paths,
+        device,
+        backend=backend,
+        backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL},
+    )
+    text_emb_list = get_text_embeddings(
+        texts,
+        device,
+        backend=backend,
+        backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL},
+    )
 
     # 3) Calcular similitudes con el helper (vectorizado)
     sims = calculate_scores_with_embeddings(audio_emb_list, text_emb_list)
@@ -68,9 +82,7 @@ def compute_clap_scores(
         scored.append(
             MusicGenCLAPResult(
                 id=r.id,
-                taste=r.taste,
-                description=r.description,
-                instrument=r.instrument,
+                prompt=r.prompt,
                 audio_path=r.audio_path,
                 clap_score=clap_score,
             )
@@ -78,17 +90,20 @@ def compute_clap_scores(
 
     # 5) (Opcional) Guardar embeddings normalizados y scores
     if save_embeddings:
-        a_norm = torch.nn.functional.normalize(torch.stack(audio_emb_list, dim=0), dim=-1)
-        t_norm = torch.nn.functional.normalize(torch.stack(text_emb_list, dim=0), dim=-1)
+        a_norm = torch.nn.functional.normalize(
+            torch.stack(audio_emb_list, dim=0), dim=-1
+        )
+        t_norm = torch.nn.functional.normalize(
+            torch.stack(text_emb_list, dim=0), dim=-1
+        )
 
         embedding_records = []
         for i, r in enumerate(results):
             audio_emb_np = a_norm[i].detach().cpu().numpy().flatten().tolist()
-            text_emb_np  = t_norm[i].detach().cpu().numpy().flatten().tolist()
+            text_emb_np = t_norm[i].detach().cpu().numpy().flatten().tolist()
             embedding_records.append(
                 {
-                    "taste": r.taste,
-                    "description": r.description,
+                    "prompt": r.prompt,
                     "audio_name": r.id,
                     "clap_score": scored[i].clap_score,
                     "audio_emb": json.dumps(audio_emb_np),
@@ -119,14 +134,12 @@ for fname in audio_files:
     audio_path = os.path.join(tracks_base_data_path, fname)
     file_id = os.path.splitext(fname)[0]
     taste = file_id.split("_")[0] if "_" in file_id else "unknown"
-    description = f"{taste} music, ambient for fine restaurant"
+    prompt = f"{taste} music, ambient for fine restaurant"
 
     results.append(
         MusicGenData(
             id=file_id,
-            taste=taste,
-            instrument="N/A",
-            description=description,
+            prompt=prompt,
             audio_path=audio_path,
         )
     )

@@ -4,7 +4,6 @@ import pandas as pd
 import torch
 
 from metrics.clap.backends.laion import MUSICGEN_WEIGHTS_URL
-# ⬇️ We only need the batch scorer and CLAPItem (no embedding helpers)
 from metrics.clap.factory import calculate_scores
 from metrics.clap.types import CLAPItem
 from models.scripts.types import MusicGenCLAPResult, MusicGenData
@@ -24,7 +23,9 @@ config = load_config()
 
 tracks_base_data_path = PROJECT_ROOT / config.data.tracks_base_data_path
 data_clap_path = (
-    PROJECT_ROOT / config.data.data_clap_path / "results_with_clap_base_prompts_with_score.csv"
+    PROJECT_ROOT
+    / config.data.data_clap_path
+    / "results_with_clap_base_prompts_with_score.csv"
 )
 
 
@@ -48,15 +49,19 @@ def compute_clap_scores(
     items = [
         CLAPItem(
             id=r.id,
-            description=r.description,
+            prompt=r.prompt,
             audio_path=r.audio_path,
-            instrument=r.instrument,
         )
         for r in results
     ]
 
     # 2) Calcular scores en batch con el backend seleccionado
-    scored_batch = calculate_scores(items, device=device, backend=backend, backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL})  # list[CLAPScored]
+    scored_batch = calculate_scores(
+        items,
+        device=device,
+        backend=backend,
+        backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL},
+    )  # list[CLAPScored]
 
     # 3) Mapear a MusicGenCLAPResult (redondeo y orden consistente)
     out: list[MusicGenCLAPResult] = []
@@ -65,9 +70,7 @@ def compute_clap_scores(
         out.append(
             MusicGenCLAPResult(
                 id=r.id,
-                taste=r.taste,
-                description=r.description,
-                instrument=r.instrument,
+                prompt=r.prompt,
                 audio_path=r.audio_path,
                 clap_score=clap_score,
             )
@@ -90,14 +93,12 @@ for fname in audio_files:
     audio_path = os.path.join(tracks_base_data_path, fname)
     file_id = os.path.splitext(fname)[0]
     taste = file_id.split("_")[0] if "_" in file_id else "unknown"
-    description = f"{taste} music, ambient for fine restaurant"
+    prompt = f"{taste} music, ambient for fine restaurant"
 
     results.append(
         MusicGenData(
             id=file_id,
-            taste=taste,
-            instrument="N/A",
-            description=description,
+            prompt=prompt,
             audio_path=audio_path,
         )
     )
