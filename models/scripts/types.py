@@ -3,17 +3,15 @@ from torch.utils.data import Dataset
 import json
 import csv
 
+
 # Tipos
 @dataclass
 class MusicGenData:
     """Estructura de datos para resultados de generación musical."""
 
     id: str
-    instrument: str
-    taste: str
-    description: str
+    prompt: str
     audio_path: str
-
 
 
 @dataclass
@@ -21,6 +19,7 @@ class MusicGenCLAPResult(MusicGenData):
     """Extiende MusicGenData para incluir el CLAP Score."""
 
     clap_score: float
+
 
 class LoadSpanioDataset(Dataset):
     """
@@ -81,7 +80,7 @@ class LoadSpanioDataset(Dataset):
             idx (int): Índice del registro a retornar.
 
         Returns
-            dict: Diccionario con las llaves `id`, `instrument` y `description`.
+            dict: Diccionario con las llaves `id` y `prompt`.
         """
         if not 0 <= idx < len(self.records):
             raise IndexError(
@@ -100,13 +99,12 @@ class LoadSpanioDataset(Dataset):
 
         dict:
             - Diccionario donde las llaves son los `id` de los registros y los valores.
-            - son diccionarios con `instrument` y `description`.
+            - son diccionarios con `prompt`.
 
         """
         return {
             doc["id"]: {
-                "instrument": doc["instrument"],
-                "description": doc["description"],
+                "prompt": doc["prompt"],
             }
             for doc in self.records
         }
@@ -114,7 +112,7 @@ class LoadSpanioDataset(Dataset):
     def to_csv(self, output_path="spanio_prompts.csv"):
         """
         Exporta los registros del dataset a un archivo CSV con columnas:
-        `id`, `instrument`, `description`.
+        `id`, `prompt`.
 
         Parameters
             output_path (str): Ruta de salida donde se guardará el archivo CSV.
@@ -122,12 +120,9 @@ class LoadSpanioDataset(Dataset):
         """
         try:
             with open(output_path, "w", newline="", encoding="utf-8") as csvfile:
-                writer = csv.DictWriter(
-                    csvfile, fieldnames=["id", "instrument", "description"]
-                )
+                writer = csv.DictWriter(csvfile, fieldnames=["id", "prompt"])
                 writer.writeheader()
                 writer.writerows(self.records)
             print(f"CSV generado en: {output_path}")
         except Exception as e:
             print(f"Error exportando a CSV: {e}")
-

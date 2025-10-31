@@ -52,10 +52,8 @@ class RAGAudioEmbeddingItem(BaseModel):
 
 
 class BasePromptEmbeddingItem(BaseModel):
-    taste: str
-    description: str
+    prompt: str
     audio_name: str
-    clap_score: float
     audio_embedding: list[float]
     text_embedding: list[float]
 
@@ -130,10 +128,8 @@ def create_base_prompt_embeddings_table() -> None:
             """
         create table if not exists {table_name} (
             id bigserial primary key,
-            taste text not null,
-            description text not null,
+            prompt text not null,
             audio_name text not null,
-            clap_score real,
             audio_embedding vector(512),
             text_embedding vector(512)
         )
@@ -190,11 +186,11 @@ def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
 
 def load_base_prompt_embeddings() -> list[BasePromptEmbeddingItem]:
     """
-    Carga los embeddings desde:
-    data/embeddings/music_base_prompts_embeddings.csv
+    Carga los embeddings de los base prompts.
     """
     file_path = os.path.join(
-        os.getcwd(), "data/embeddings/music_base_prompts_embeddings.csv"
+        os.getcwd(),
+        "data/embeddings/music_base_prompts_embeddings_audioset_weights_enabled_fusion.csv",
     )
 
     items: list[BasePromptEmbeddingItem] = []
@@ -203,21 +199,20 @@ def load_base_prompt_embeddings() -> list[BasePromptEmbeddingItem]:
         reader = csv.DictReader(f)
         for row in reader:
             try:
-                audio_emb = [float(x) for x in json.loads(row["audio_emb"])]
-                text_emb = [float(x) for x in json.loads(row["text_emb"])]
-                clap_score = float(row["clap_score"])
+                audio_emb = np.array(json.loads(row["audio_emb"]))
+                text_emb = np.array(json.loads(row["text_emb"]))
 
                 item = BasePromptEmbeddingItem(
-                    taste=row["taste"],
-                    description=row["description"],
+                    prompt=row["prompt"],
                     audio_name=row["audio_name"],
-                    clap_score=clap_score,
-                    audio_embedding=audio_emb,
-                    text_embedding=text_emb,
+                    audio_embedding=audio_emb.tolist(),
+                    text_embedding=text_emb.tolist(),
                 )
                 items.append(item)
-            except Exception as e:
-                logger.warning(f"Error procesando fila: {e}")
+            except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+                logger.warning(
+                    f"Error procesando fila '{row.get('audio_name', 'N/A')}': {e}"
+                )
 
     logger.info(f"Cargados {len(items)} embeddings de base_prompts.")
     return items
@@ -310,10 +305,8 @@ def insert_base_prompt_embeddings(
     """
     params = [
         (
-            it.taste,
-            it.description,
+            it.prompt,
             it.audio_name,
-            it.clap_score,
             it.audio_embedding,
             it.text_embedding,
         )
@@ -324,8 +317,8 @@ def insert_base_prompt_embeddings(
         insert_sql = sql.SQL(
             """
             insert into {tbl} 
-            (taste, description, audio_name, clap_score, audio_embedding, text_embedding)
-            values (%s, %s, %s, %s, %s, %s)
+            (prompt, audio_name, audio_embedding, text_embedding)
+            values (%s, %s, %s, %s)
         """
         ).format(tbl=sql.Identifier(table_name))
 
