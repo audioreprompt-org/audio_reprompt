@@ -1,5 +1,6 @@
 outs:
-- md5: a16502215885ee4a8a4dab6d2572c374.dir
-  nfiles: 8
+- md5: 0560d1ff92a56120a2ed73f3cedcec3a.dir
+  nfiles: 12
   hash: md5
   path: scores
+  size: 176808
