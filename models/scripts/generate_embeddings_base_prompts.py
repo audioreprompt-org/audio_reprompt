@@ -63,13 +63,13 @@ def compute_clap_scores(
         audio_paths,
         device,
         backend=backend,
-        backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL},
+        backend_cfg={"enable_fusion": True, "weights": MUSICGEN_WEIGHTS_URL},
     )
     text_emb_list = get_text_embeddings(
         texts,
         device,
         backend=backend,
-        backend_cfg={"enable_fusion": False, "weights": MUSICGEN_WEIGHTS_URL},
+        backend_cfg={"enable_fusion": True, "weights": MUSICGEN_WEIGHTS_URL},
     )
 
     # 3) Calcular similitudes con el helper (vectorizado)
