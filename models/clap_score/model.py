@@ -31,7 +31,7 @@ class ClapModel:
 
         if weights:
             state_dict = torch.hub.load_state_dict_from_url(
-                weights, map_location=device, weights_only=False
+                weights, map_location=self.device, weights_only=False
             )
             self.model.load_state_dict(state_dict, strict=False)
         else:
@@ -49,7 +49,7 @@ class ClapModel:
             emb = self.model.get_audio_embedding_from_data(audio_tensor, use_tensor=True)
             embeddings.append(emb)
 
-        return torch.stack(embeddings, dim=0)
+        return torch.stack(embeddings, dim=0).squeeze(1)
 
     @torch.no_grad()
     def embed_text(self, texts: list[str]) -> torch.Tensor:
@@ -70,8 +70,8 @@ class ClapModel:
     def calculate_scores(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:
         out: list[CLAPScored] = []
 
-        text_embeddings = self.model.embed_text([element.audio_path for element in items], use_tensor=True)
-        audio_embeddings = self.model.embed_audio([element.audio_path for element in items], use_tensor=True)
+        text_embeddings = self.embed_text([element.audio_path for element in items])
+        audio_embeddings = self.embed_audio([element.audio_path for element in items])
 
         scores = self.calculate_score_with_embeddings(text_embeddings, audio_embeddings)
         for index, items in enumerate(items):
