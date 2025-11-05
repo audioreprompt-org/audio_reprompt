@@ -6,7 +6,7 @@ import scipy.io.wavfile
 from transformers import pipeline
 from tqdm import tqdm
 from config import load_config, setup_project_paths, PROJECT_ROOT
-from models.scripts.types import MusicGenData
+from models.scripts.typedefs import MusicGenData
 
 
 def generate_music_from_prompts(

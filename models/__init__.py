@@ -1,4 +1,4 @@
-from models.scripts.types import MusicGenCLAPResult, MusicGenData
+from models.scripts.typedefs import MusicGenCLAPResult, MusicGenData
 
 __all__ = [
     "MusicGenCLAPResult",

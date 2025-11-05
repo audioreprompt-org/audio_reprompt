@@ -3,7 +3,7 @@ import torch
 
 from laion_clap import CLAP_Module
 
-from models.clap_score.typedef import CLAPScored, CLAPItem, TARGET_SR
+from models.clap_score.typedefs import CLAPScored, CLAPItem, TARGET_SR
 
 from models.clap_score.utils import load_audio_tensor, resolve_device
 
