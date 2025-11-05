@@ -20,6 +20,7 @@ class CLAPMetric(Metric):
             device: str,
             scores_dir: Path
     ) -> dict[str, Any]:
+
         csv_name = metric_cfg.get("output_csv_name", "results_with_clap.csv")
         backend: str = metric_cfg.get("backend", "laion_module")
         backend_cfg: Optional[dict[str, Any]] = metric_cfg.get("backend_cfg")
@@ -31,7 +32,7 @@ class CLAPMetric(Metric):
             for it in audio_items
         ]
 
-        scored = clap_lib.calculate_scores(items, device=device, backend=backend)
+        scored = clap_lib.calculate_scores(items, device=device, backend=backend, backend_cfg=backend_cfg)
 
         out_csv = scores_dir / csv_name
         out_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -53,6 +54,7 @@ class CLAPMetric(Metric):
             "metric": self.name,
             "device": device,
             "backend": backend,
+            "backend_cfg": backend_cfg or {},
             "total_scored": len(scored),
             "csv_path": str(out_csv.relative_to(PROJECT_ROOT)),
             "per_flavor": per_flavor,
@@ -64,3 +66,4 @@ class CLAPMetric(Metric):
             json.dump(summary, f, indent=2, ensure_ascii=False)
 
         return summary
+
