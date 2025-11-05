@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_text_embeddings_in_batches(descriptors: list[str], batch_size: int = 16):
-    model = ClapModel(enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL)
+    model = ClapModel(device="auto", enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL)
     embeddings = []
 
     for pos in range(0, len(descriptors), batch_size):

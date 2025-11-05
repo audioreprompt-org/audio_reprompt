@@ -13,24 +13,25 @@ SPECIALIZED_WEIGHTS_URL = "https://huggingface.co/lukewys/laion_clap/resolve/mai
 class ClapModel:
     name = "laion_module"
 
-    def __init__(self, enable_fusion: bool = False, weights: Optional[str] = None) -> None:
+    def __init__(self, device: str, *, enable_fusion: bool = False, weights: Optional[str] = None) -> None:
         """
         Initialize LAION-CLAP score.
 
         Args:
+            device: "cpu", "cuda", or "auto"
             enable_fusion: Whether to enable the CLAP_Module fusion mode.
             weights: Path or URL to a custom checkpoint. If None, uses default WEIGHTS_URL.
                      - If it looks like http(s)://, it will be downloaded via torch.hub.
                      - Otherwise, it's treated as a local file path.
         """
-        self.device = resolve_device()
+        self.device = resolve_device(device)
 
         # Allow toggling fusion and swapping weights
         self.model = CLAP_Module(enable_fusion=enable_fusion)
 
         if weights:
             state_dict = torch.hub.load_state_dict_from_url(
-                weights, map_location=self.device, weights_only=False
+                weights, map_location=device, weights_only=False
             )
             self.model.load_state_dict(state_dict, strict=False)
         else:

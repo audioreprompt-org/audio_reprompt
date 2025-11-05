@@ -15,7 +15,7 @@ def get_audio_embeddings(descriptor_dominance: dict[str, dict[str, float]], path
     Build normalized CLAP embeddings for each audio file in `paths`.
     `audio_id` is taken from the file stem (e.g., '99' for '.../99.mp3').
     """
-    model = ClapModel(enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL)
+    model = ClapModel(device="auto", enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL)
     embeddings = []
 
     audio_embeddings = model.embed_audio([str(audio_path) for audio_path in paths])
