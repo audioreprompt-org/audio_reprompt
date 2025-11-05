@@ -9,9 +9,8 @@ TARGET_SR = 48_000
 @dataclass(frozen=True)
 class CLAPItem:
     id: str
-    description: str
+    prompt: str
     audio_path: str
-    instrument: Optional[str] = None
 
 
 @dataclass(frozen=True)

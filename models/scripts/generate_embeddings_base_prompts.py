@@ -4,14 +4,11 @@ import json
 
 import torch
 
-from metrics.clap import get_audio_embeddings_from_paths, get_text_embeddings
-from metrics.clap.backends.laion import MUSICGEN_WEIGHTS_URL
-from metrics.clap.factory import calculate_scores_with_embeddings
+from models.clap_score.model import ClapModel, SPECIALIZED_WEIGHTS_URL
+from models.clap_score.utils import set_reproducibility, resolve_device
 from models.scripts.types import MusicGenCLAPResult, MusicGenData
 from config import load_config, setup_project_paths, PROJECT_ROOT
-from utils.device import resolve_device
 
-from utils.seed import set_reproducibility
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -41,7 +38,6 @@ def compute_clap_scores(
     results: list[MusicGenData],
     device=None,
     save_embeddings=True,
-    backend: str = "laion_module",
 ) -> list[MusicGenCLAPResult]:
     """
     Calcula el CLAP Score (similaridad texto-audio) usando embeddings del modelo CLAP.
@@ -54,26 +50,23 @@ def compute_clap_scores(
     if not results:
         return []
 
+    # 0) Inicializar ClapModel
+    clap_score = ClapModel(device=device, enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL)
+
     # 1) Preparar listas en el mismo orden
     audio_paths = [r.audio_path for r in results]
     texts = [r.prompt for r in results]
 
     # 2) Obtener embeddings en batch (una sola llamada por tipo)
-    audio_emb_list = get_audio_embeddings_from_paths(
+    audio_emb_list = clap_score.embed_audio(
         audio_paths,
-        device,
-        backend=backend,
-        backend_cfg={"enable_fusion": True, "weights": MUSICGEN_WEIGHTS_URL},
     )
-    text_emb_list = get_text_embeddings(
+    text_emb_list = clap_score.embed_text(
         texts,
-        device,
-        backend=backend,
-        backend_cfg={"enable_fusion": True, "weights": MUSICGEN_WEIGHTS_URL},
     )
 
     # 3) Calcular similitudes con el helper (vectorizado)
-    sims = calculate_scores_with_embeddings(audio_emb_list, text_emb_list)
+    sims = clap_score.calculate_score_with_embeddings(audio_emb_list, text_emb_list)
 
     # 4) Construir resultados (sin tocar embeddings aún)
     scored: list[MusicGenCLAPResult] = []
@@ -90,12 +83,8 @@ def compute_clap_scores(
 
     # 5) (Opcional) Guardar embeddings normalizados y scores
     if save_embeddings:
-        a_norm = torch.nn.functional.normalize(
-            torch.stack(audio_emb_list, dim=0), dim=-1
-        )
-        t_norm = torch.nn.functional.normalize(
-            torch.stack(text_emb_list, dim=0), dim=-1
-        )
+        a_norm = torch.nn.functional.normalize(audio_emb_list, dim=-1)
+        t_norm = torch.nn.functional.normalize(text_emb_list, dim=-1)
 
         embedding_records = []
         for i, r in enumerate(results):

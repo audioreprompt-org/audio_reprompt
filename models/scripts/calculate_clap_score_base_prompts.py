@@ -3,13 +3,11 @@ import pandas as pd
 
 import torch
 
-from metrics.clap.backends.laion import MUSICGEN_WEIGHTS_URL
-from metrics.clap.factory import calculate_scores
-from metrics.clap.types import CLAPItem
+from models.clap_score.model import ClapModel, SPECIALIZED_WEIGHTS_URL
+from models.clap_score.typedef import CLAPItem
+from models.clap_score.utils import set_reproducibility, resolve_device
 from models.scripts.types import MusicGenCLAPResult, MusicGenData
 from config import load_config, setup_project_paths, PROJECT_ROOT
-from utils.device import resolve_device
-from utils.seed import set_reproducibility
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -32,7 +30,6 @@ data_clap_path = (
 def compute_clap_scores(
     results: list[MusicGenData],
     device=None,
-    backend: str = "laion_module",
 ) -> list[MusicGenCLAPResult]:
     """
     Calcula SOLO el CLAP Score (similaridad texto-audio) usando el scorer por lotes.
@@ -41,6 +38,8 @@ def compute_clap_scores(
     set_reproducibility(42)
     device = resolve_device(device)
     print(f"\nUsando dispositivo: {device}\n")
+
+    clap_score = ClapModel(device=device, enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL)
 
     if not results:
         return []
@@ -56,11 +55,8 @@ def compute_clap_scores(
     ]
 
     # 2) Calcular scores en batch con el backend seleccionado
-    scored_batch = calculate_scores(
+    scored_batch = clap_score.calculate_scores(
         items,
-        device=device,
-        backend=backend,
-        backend_cfg={"enable_fusion": True, "weights": MUSICGEN_WEIGHTS_URL},
     )  # list[CLAPScored]
 
     # 3) Mapear a MusicGenCLAPResult (redondeo y orden consistente)
