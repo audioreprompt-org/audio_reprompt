@@ -17,5 +17,5 @@ class CLAPItem:
 class CLAPScored:
     item: CLAPItem
     clap_score: float
-    audio_embedding: Optional[List[float]] = None
-    text_embedding: Optional[List[float]] = None
+audio_embedding: list[float] | None = None
+text_embedding: list[float] | None = None
