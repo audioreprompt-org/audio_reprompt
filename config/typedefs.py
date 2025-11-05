@@ -82,11 +82,6 @@ class EnvironmentConfig:
 
 
 @dataclass
-class EvaluationConfig:
-    metrics: dict[str, dict[str, Any]] = field(default_factory=dict)
-
-
-@dataclass
 class Config:
     """Main configuration container."""
 
@@ -96,5 +91,4 @@ class Config:
     inference: InferenceConfig
     logging: LoggingConfig
     environment: EnvironmentConfig
-    evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     _raw_config: dict[str, Any] = field(default_factory=dict, repr=False)
