@@ -70,11 +70,11 @@ class ClapModel:
     def calculate_scores(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:
         out: list[CLAPScored] = []
 
-        text_embeddings = self.embed_text([element.audio_path for element in items])
+        text_embeddings = self.embed_text([element.prompt for element in items])
         audio_embeddings = self.embed_audio([element.audio_path for element in items])
 
         scores = self.calculate_score_with_embeddings(text_embeddings, audio_embeddings)
-        for index, items in enumerate(items):
-            out.append(CLAPScored(item=items, clap_score=scores[index]))
+        for idx, item in enumerate(items):
+            out.append(CLAPScored(item=item, clap_score=scores[idx]))
 
         return out

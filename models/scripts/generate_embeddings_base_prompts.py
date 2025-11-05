@@ -65,7 +65,7 @@ def compute_clap_scores(
     )
 
     # 3) Calcular similitudes con el helper (vectorizado)
-    sims = clap_score.calculate_score_with_embeddings(audio_emb_list, text_emb_list)
+    sims = clap_score.calculate_score_with_embeddings(text_emb_list, audio_emb_list)
 
     # 4) Construir resultados (sin tocar embeddings aún)
     scored: list[MusicGenCLAPResult] = []
