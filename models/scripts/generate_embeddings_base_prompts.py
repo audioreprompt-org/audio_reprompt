@@ -4,8 +4,7 @@ import json
 
 import torch
 
-from models.clap_score.model import ClapModel, SPECIALIZED_WEIGHTS_URL
-from models.clap_score.utils import set_reproducibility, resolve_device
+from models.clap_score import ClapModel, SPECIALIZED_WEIGHTS_URL, CLAPItem, set_reproducibility, resolve_device
 from models.scripts.types import MusicGenCLAPResult, MusicGenData
 from config import load_config, setup_project_paths, PROJECT_ROOT
 
