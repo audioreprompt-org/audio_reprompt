@@ -1,23 +1,20 @@
 from typing import Iterable
 import numpy as np
 import torch
+import torchaudio
 
 from metrics.clap.types import CLAPItem, CLAPScored, TARGET_SR
-from metrics.clap.backends.base import (
-    BackendUnavailable,
-    compute_scores_with_embeddings,
-    BaseBackend,
-)
-from utils.device import resolve_device
+from metrics.clap.backends.base import BackendUnavailable, _resolve_device
+
 
 _EXPECTED_MODEL_ID = "laion/clap-htsat-fused"
 
 
-class HFProcessorBackend(BaseBackend):
+class HFProcessorBackend:
     name = "hf_processor"
 
     def __init__(self, device: str) -> None:
-        self.device = resolve_device(device)
+        self.device = _resolve_device(device)
         try:
             from transformers import ClapProcessor, ClapModel  # type: ignore
         except Exception as e:
@@ -29,18 +26,34 @@ class HFProcessorBackend(BaseBackend):
         except Exception as e:
             raise BackendUnavailable(f"Failed to load HF model '{_EXPECTED_MODEL_ID}'.") from e
 
+        # Verify weights come from the expected repo id.
         name_or_path = getattr(self.model, "name_or_path", None) or getattr(getattr(self.model, "config", None), "_name_or_path", None)
         if name_or_path and _EXPECTED_MODEL_ID not in str(name_or_path):
             raise BackendUnavailable(f"Unexpected HF model source: '{name_or_path}' (expected '{_EXPECTED_MODEL_ID}')")
 
     @torch.no_grad()
-    def embed_audio(self, audio_np) -> torch.Tensor:
-        pass
-
-    @torch.no_grad()
-    def embed_text(self, text: str) -> torch.Tensor:
-        pass
-
-    @torch.no_grad()
     def score_batch(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:
-        return compute_scores_with_embeddings(self, items)
+        out: list[CLAPScored] = []
+        for it in items:
+            wav, sr = torchaudio.load(it.audio_path)
+            if sr != TARGET_SR:
+                wav = torchaudio.functional.resample(wav, sr, TARGET_SR)
+            if wav.shape[0] > 1:
+                wav = wav.mean(dim=0, keepdim=True)
+            audio_np = wav.squeeze(0).cpu().numpy()
+
+            inputs = self.processor(
+                audios=[audio_np],
+                text=[it.description],
+                sampling_rate=TARGET_SR,
+                return_tensors="pt",
+                padding=True,
+            )
+            inputs = {k: (v.to(self.device) if isinstance(v, torch.Tensor) else v) for k, v in inputs.items()}
+            aemb = self.model.get_audio_features(**inputs)
+            temb = self.model.get_text_features(**inputs)
+            aemb = torch.nn.functional.normalize(aemb, dim=-1)
+            temb = torch.nn.functional.normalize(temb, dim=-1)
+            val = torch.nn.functional.cosine_similarity(aemb, temb).item()
+            out.append(CLAPScored(item=it, clap_score=float(np.round(val, 6))))
+        return out
