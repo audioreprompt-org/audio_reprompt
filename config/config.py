@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from config.manager import ConfigManager
 from config.typedefs import Config, DataConfig, EnvironmentConfig, InferenceConfig, LoggingConfig, ModelConfig, \
-    TrainingConfig, EvaluationConfig
+    TrainingConfig
 from config import PROJECT_ROOT
 
 # Global config manager instance
@@ -76,11 +76,6 @@ def get_logging_config() -> LoggingConfig:
 def get_environment_config() -> EnvironmentConfig:
     """Get environment configuration settings."""
     return load_config().environment
-
-
-def get_evaluation_config() -> EvaluationConfig:
-    """Get evaluation configuration settings."""
-    return load_config().evaluation
 
 
 def get_raw_config() -> Dict[str, Any]:
