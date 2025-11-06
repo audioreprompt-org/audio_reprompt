@@ -4,10 +4,14 @@ import json
 
 import torch
 
-from models.clap_score import ClapModel, SPECIALIZED_WEIGHTS_URL, CLAPItem, set_reproducibility, resolve_device
+from models.clap_score import (
+    ClapModel,
+    SPECIALIZED_WEIGHTS_URL,
+    set_reproducibility,
+    resolve_device,
+)
 from models.scripts.typedefs import MusicGenCLAPResult, MusicGenData
 from config import load_config, setup_project_paths, PROJECT_ROOT
-
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -50,7 +54,9 @@ def compute_clap_scores(
         return []
 
     # 0) Inicializar ClapModel
-    clap_score = ClapModel(device=device, enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL)
+    clap_score = ClapModel(
+        device=device, enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL
+    )
 
     # 1) Preparar listas en el mismo orden
     audio_paths = [r.audio_path for r in results]
