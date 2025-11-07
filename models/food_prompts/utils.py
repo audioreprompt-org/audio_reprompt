@@ -109,14 +109,15 @@ def collect_food_results(
 
     (
         pd.DataFrame(results)
+        .merge(batch_records, on='custom_id')
         .sort_values(by="food_captions")
         .to_csv(
             file_output,
             columns=[
                 "custom_id",
+                "food_item",
                 "food_captions",
                 "model",
-                "question",
                 "in_tokens",
                 "out_tokens",
                 "total_tokens",

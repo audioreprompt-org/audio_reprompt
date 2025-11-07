@@ -1,4 +1,5 @@
 import datetime
+import glob
 import logging
 import os
 import random
@@ -109,12 +110,12 @@ def collect_batch_results(file_input: str) -> None:
             download_batch_result(batch_id, None)
 
 
-def collect_batches_food_results(file_input: str) -> None:
+def collect_batches_food_results(file_input: str, output_dir: str) -> None:
     logger.info("processing file input: %s", file_input)
     df = pd.read_csv(file_input)
     os.makedirs("results", exist_ok=True)
 
-    file_output = file_input.split("/")[-1].replace(".csv", "_out.csv")
+    file_output = f"{output_dir}/" + file_input.split("/")[-1].replace(".csv", "_out.csv")
 
     collect_food_results(df, file_output)
 
@@ -143,7 +144,9 @@ if __name__ == '__main__':
         500
     )
 
-    option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
+    # option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
+    # option = BatchOptionEnum.OPTION_COLLECT_BATCHES
+    option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
 
     match option:
         case BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE:
@@ -151,6 +154,9 @@ if __name__ == '__main__':
                 put_batch_get_food_captions(sample_part, MODEL_GTP_40_MINI, PROMPT_V1)
 
         case BatchOptionEnum.OPTION_COLLECT_BATCHES:
-            ...
+            for batch_file in glob.glob('batch_requests_*.csv'):
+                collect_batch_results(batch_file)
+
         case BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS:
-            ...
+            for batch_file in glob.glob('batch_requests_*.csv'):
+                collect_batches_food_results(batch_file, FOOD_PROMPTS_PATH)

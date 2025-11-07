@@ -221,3 +221,4 @@ terraform/stacks/apps_base/.terraform/
 
 # Open AI Batch records
 models/food_prompts/batch_requests_part_*.csv
+models/food_prompts/results/*.jsonl
