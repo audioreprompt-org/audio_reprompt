@@ -62,7 +62,7 @@ def filter_error_requests(row: dict[str, Any]) -> bool:
     return False if "error" in row["response"]["body"] else True
 
 
-def collect_keyword_results(
+def collect_food_results(
     batch_records: pd.DataFrame, file_output: str
 ) -> None:
     results: list[dict[str, str]] = []

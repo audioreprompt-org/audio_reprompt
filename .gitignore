@@ -218,3 +218,6 @@ terraform/stacks/apps_base/.terraform/
 
 # MacOS
 .DS_Store
+
+# Open AI Batch records
+models/food_prompts/batch_requests_part_*.csv
