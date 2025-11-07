@@ -1,5 +1,8 @@
 import logging
 import os
+import io
+from scipy.io.wavfile import write as wav_write
+
 import scipy.io.wavfile
 from tqdm import tqdm
 
@@ -45,3 +48,19 @@ def generate_audio_from_prompts(
 
     print(f"{len(results)} archivos de audio generados en: {output_dir}")
     return results
+
+
+def generate_audio_buffer_from_prompt(text_prompt, synthesiser) -> io.BytesIO:
+    # 1. Generar la música con el modelo.
+    # output es un diccionario: audio(array NumPy con la señal de audio) y sampling_rate (frecuencia de muestreo del modelo).
+    output = synthesiser(text_prompt, forward_params={"do_sample": True})
+
+    # 2. Extraer datos del audio.
+    audio_data = output["audio"]  # La onda de sonido (las muestras del audio).
+    sr = output.get("sampling_rate")  # La frecuencia de muestreo reportada por el modelo.
+
+    buf = io.BytesIO()
+    wav_write(buf, sr, audio_data)
+    buf.seek(0)
+
+    return buf

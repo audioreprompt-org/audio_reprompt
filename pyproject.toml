@@ -16,6 +16,7 @@ dependencies = [
     "nltk>=3.9.2",
     "psycopg[binary]>=3.2.11",
     "fastapi>=0.121.0",
+    "uvicorn>=0.38.0",
 ]
 
 [build-system]
