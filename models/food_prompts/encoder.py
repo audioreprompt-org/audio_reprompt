@@ -6,6 +6,8 @@ import torch
 
 from config import load_config, setup_project_paths, PROJECT_ROOT
 from models.clap_score import ClapModel, SPECIALIZED_WEIGHTS_URL
+
+from models.descriptors.db import insert_crossmodal_food_embeddings
 from models.food_prompts.parser import map_to_fooditem_crossmodal
 from models.food_prompts.typedefs import FoodItemCrossModal, FoodItemCrossModalEncoded
 from models.food_prompts.utils import chunks
@@ -21,12 +23,12 @@ def encode_food_crossmodal_items(
     )
 
     embs = clap_encoder.embed_text(
-        [f"{item['food_item']} {item['value']}" for item in items]
+        [f"{item['food_item']} {item['descriptor']}" for item in items]
     )
 
     encoded_items = []
     for emb, item in zip(embs, items):
-        encoded_items.append(item | {"embeddings": emb.tolist()})
+        encoded_items.append(item | {"text_embedding": emb.tolist()})
 
     return encoded_items
 
@@ -44,7 +46,9 @@ def parse_food_crossmodal_items(fpath: str) -> list[FoodItemCrossModal]:
 
 def encode_and_save_in_batches(items: list[FoodItemCrossModal]):
     for chunk in chunks(items, 100):
-        encoded_food_items = encode_food_crossmodal_items(chunk)
+        insert_crossmodal_food_embeddings(
+            encode_food_crossmodal_items(chunk)
+        )
 
 
 if __name__ == "__main__":

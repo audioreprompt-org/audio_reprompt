@@ -11,6 +11,8 @@ from models.descriptors.spanio_captions import SpanioCaptionsEmbedding
 from psycopg import connect, sql
 from pydantic import BaseModel
 
+from models.food_prompts.typedefs import FoodItemCrossModalEncoded
+
 logger = logging.getLogger(__name__)
 
 DB_USER = os.environ["DB_USER"]
@@ -22,6 +24,7 @@ AUDIO_DESCRIPTOR_TABLE_NAME = "audio_descriptors"
 GUEDES_AUDIO_TABLE_NAME = "guedes_audio_embeddings"
 RAG_AUDIO_TABLE_NAME = "rag_audio_embeddings"
 BASE_PROMPT_EMBEDDINGS_TABLE_NAME = "base_prompt_embeddings"
+CROSSMODAL_FOOD_EMBEDDINGS_TABLE_NAME = "crossmodal_food_embeddings"
 
 
 class ExecutionOption(Enum):
@@ -147,10 +150,15 @@ def create_food_crossmodal_embeddings_table() -> None:
             """
             create table if not exists {table_name} (
                 id bigserial primary key,
+                food_item text not null,
+                dimension text not null,
+                descriptor text not null,
+                text_embedding vector(512)
             )
             """
-        )
+        ).format(table_name=sql.Identifier(CROSSMODAL_FOOD_EMBEDDINGS_TABLE_NAME))
 
+        cursor.execute(create_table)
 
 
 def load_guedes_audio_descriptor_items() -> list[GuedesAudioDescriptorItem]:
@@ -337,6 +345,34 @@ def insert_base_prompt_embeddings(
         ).format(tbl=sql.Identifier(table_name))
 
         cursor.executemany(insert_sql, params)
+        inserted = cursor.rowcount
+
+    logger.info(f"Inserted {inserted} base prompt embeddings.")
+    return inserted
+
+
+def insert_crossmodal_food_embeddings(
+        crossmodal_food_items: list[FoodItemCrossModalEncoded],
+        table_name: str = CROSSMODAL_FOOD_EMBEDDINGS_TABLE_NAME
+):
+    with get_conn().cursor() as cursor:
+        insert_sql = sql.SQL(
+            """
+            insert into {tbl} 
+            (food_item, dimension, descriptor, text_embedding)
+            values (%s, %s, %s, %s)
+        """
+        ).format(tbl=sql.Identifier(table_name))
+
+        cursor.executemany(
+            insert_sql,
+            [(
+                it['food_item'],
+                it['dimension'],
+                it['descriptor'],
+                it['text_embedding']
+            )for it in crossmodal_food_items]
+        )
         inserted = cursor.rowcount
 
     logger.info(f"Inserted {inserted} base prompt embeddings.")

@@ -33,7 +33,7 @@ def map_to_fooditem_crossmodal(result: dict[str, Any]) -> list[FoodItemCrossModa
     if food_item_agg:= parse_item_result(result):
         food_item = food_item_agg["food_item"]
         return [
-            {"food_item": food_item, "dimension": dimension, "value": val.strip().lower()}
+            {"food_item": food_item, "dimension": dimension, "descriptor": val.strip().lower()}
             for dimension, values in food_item_agg["values"]
             for val in values
         ]

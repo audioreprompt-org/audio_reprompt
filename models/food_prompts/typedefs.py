@@ -4,11 +4,11 @@ from typing import TypedDict
 class FoodItemCrossModal(TypedDict):
     food_item: str
     dimension: str
-    value: str
+    descriptor: str
 
 
 class FoodItemCrossModalEncoded(FoodItemCrossModal):
-    embeddings: list[float]
+    text_embedding: list[float]
 
 
 class FoodItemAggCrossModal(TypedDict):
