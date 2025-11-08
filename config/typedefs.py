@@ -27,7 +27,6 @@ class ModelConfig:
 
     name: str
     model_musicgen_path: str
-    laion_clap_path: str
     max_sequence_length: int
     hidden_size: int
     num_attention_heads: int
