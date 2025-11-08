@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from config.typedefs import (
     Config, DataConfig, EnvironmentConfig, InferenceConfig, LoggingConfig,
-    ModelConfig, TrainingConfig, EvaluationConfig,
+    ModelConfig, TrainingConfig
 )
 
 
@@ -71,12 +71,6 @@ class ConfigManager:
             logging_config = LoggingConfig(**config_data.get('logging', {}))
             environment_config = EnvironmentConfig(**config_data.get('environment', {}))
 
-            # Evaluation dataclasses
-            eval_dict = config_data.get('evaluation', {})
-            evaluation_config = EvaluationConfig(
-                metrics=eval_dict.get('metrics', {})
-            )
-
             return Config(
                 data=data_config,
                 model=model_config,
@@ -84,7 +78,6 @@ class ConfigManager:
                 inference=inference_config,
                 logging=logging_config,
                 environment=environment_config,
-                evaluation=evaluation_config,
                 _raw_config=config_data
             )
         except TypeError as e:

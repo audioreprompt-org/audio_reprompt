@@ -16,7 +16,6 @@ from config.typedefs import (
   InferenceConfig,
   LoggingConfig,
   EnvironmentConfig,
-  EvaluationConfig,
 )
 
 
@@ -32,7 +31,6 @@ from config.config import (
     get_config_value,
     setup_project_paths,
     get_raw_config,
-    get_evaluation_config
 )
 
 __all__ = [
@@ -48,7 +46,6 @@ __all__ = [
     'get_config_value',
     'setup_project_paths',
     'get_raw_config',
-    'get_evaluation_config',
     'Config',
     'DataConfig',
     'ModelConfig',
@@ -57,5 +54,4 @@ __all__ = [
     'LoggingConfig',
     'EnvironmentConfig',
     'ConfigurationError',
-    'EvaluationConfig',
 ]
