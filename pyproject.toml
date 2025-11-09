@@ -19,6 +19,7 @@ dependencies = [
     "openai>=2.6.1",
     "matplotlib>=3.10.7",
     "seaborn>=0.13.2",
+    "sentence-transformers>=5.1.2",
 ]
 
 [build-system]

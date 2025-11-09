@@ -1,4 +1,5 @@
 import csv
+import glob
 import json
 import logging
 import os
@@ -7,11 +8,17 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+from config import setup_project_paths, load_config, PROJECT_ROOT
 from models.descriptors.spanio_captions import SpanioCaptionsEmbedding
 from psycopg import connect, sql
 from pydantic import BaseModel
 
+from models.food_prompts.encoder import (
+    parse_food_crossmodal_items,
+    encode_food_crossmodal_items,
+)
 from models.food_prompts.typedefs import FoodItemCrossModalEncoded
+from models.food_prompts.utils import chunks
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +39,7 @@ class ExecutionOption(Enum):
     INSERT_AUDIO_DESCRIPTORS = 2
     INSERT_RAG_AUDIO_EMBEDDINGS = 3
     INSERT_BASE_PROMPT_EMBEDDINGS = 4
+    INSERT_CROSSMODAL_FOOD_EMBEDDINGS = 5
 
 
 class AudioDescriptorItem(BaseModel):
@@ -153,7 +161,7 @@ def create_food_crossmodal_embeddings_table() -> None:
                 food_item text not null,
                 dimension text not null,
                 descriptor text not null,
-                text_embedding vector(512)
+                text_embedding vector(384)
             )
             """
         ).format(table_name=sql.Identifier(CROSSMODAL_FOOD_EMBEDDINGS_TABLE_NAME))
@@ -352,8 +360,8 @@ def insert_base_prompt_embeddings(
 
 
 def insert_crossmodal_food_embeddings(
-        crossmodal_food_items: list[FoodItemCrossModalEncoded],
-        table_name: str = CROSSMODAL_FOOD_EMBEDDINGS_TABLE_NAME
+    crossmodal_food_items: list[FoodItemCrossModalEncoded],
+    table_name: str = CROSSMODAL_FOOD_EMBEDDINGS_TABLE_NAME,
 ):
     with get_conn().cursor() as cursor:
         insert_sql = sql.SQL(
@@ -366,16 +374,19 @@ def insert_crossmodal_food_embeddings(
 
         cursor.executemany(
             insert_sql,
-            [(
-                it['food_item'],
-                it['dimension'],
-                it['descriptor'],
-                it['text_embedding']
-            )for it in crossmodal_food_items]
+            [
+                (
+                    it["food_item"],
+                    it["dimension"],
+                    it["descriptor"],
+                    it["text_embedding"],
+                )
+                for it in crossmodal_food_items
+            ],
         )
         inserted = cursor.rowcount
 
-    logger.info(f"Inserted {inserted} base prompt embeddings.")
+    logger.info(f"Inserted {inserted} crossmodal food embeddings.")
     return inserted
 
 
@@ -447,6 +458,17 @@ def get_top_k_audio_captions(
     return results
 
 
+def load_and_insert_crossmodal_food_embeddings():
+    setup_project_paths()
+    config = load_config()
+
+    food_prompts_path = PROJECT_ROOT / config.data.cleaned_data_path / "food_prompts"
+
+    for filepath in glob.glob(f"{food_prompts_path}/*.csv"):
+        for chunk in chunks(parse_food_crossmodal_items(filepath), 100):
+            insert_crossmodal_food_embeddings(encode_food_crossmodal_items(chunk))
+
+
 # def test():
 #     create_audio_descriptors_table()
 #     insert_audio_descriptors(
@@ -460,7 +482,7 @@ def get_top_k_audio_captions(
 
 if __name__ == "__main__":
     # set manual option
-    option = ExecutionOption.INSERT_BASE_PROMPT_EMBEDDINGS
+    option = ExecutionOption.INSERT_CROSSMODAL_FOOD_EMBEDDINGS
 
     match option:
         case ExecutionOption.INSERT_GUEDES_AUDIO_EMBEDDINGS:
@@ -482,3 +504,7 @@ if __name__ == "__main__":
             create_base_prompt_embeddings_table()
             items = load_base_prompt_embeddings()
             insert_base_prompt_embeddings(items)
+
+        case ExecutionOption.INSERT_CROSSMODAL_FOOD_EMBEDDINGS:
+            create_food_crossmodal_embeddings_table()
+            load_and_insert_crossmodal_food_embeddings()
