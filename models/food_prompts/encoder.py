@@ -36,11 +36,14 @@ def encode_food_crossmodal_items(
     return encoded_items
 
 
-def encode_text(items: list[str]) -> list[tuple[str, list[float]]]:
-    return [(text, emb.tolist) for text, emb in zip(items, model.encode(items))]
+def encode_text(items: list[str]) -> list[dict[str, str|list[float]]]:
+    return [
+        {"prompt": text, "text_embedding": emb.tolist()}
+        for text, emb in zip(items, model.encode(items))
+    ]
 
 
-if __name__ == "__main__":
+def data_examples_crossmodal()-> None:
     setup_project_paths()
     config = load_config()
 
@@ -62,3 +65,25 @@ if __name__ == "__main__":
     )
 
     pd.DataFrame(embs).to_csv(f"{embs_dir}/all_mini_lemon_embs.csv")
+
+
+def data_raw_prompt_user() -> None:
+    setup_project_paths()
+    config = load_config()
+
+    raw_user_dir = PROJECT_ROOT / config.data.raw_data_path / "user"
+    embs_dir = PROJECT_ROOT / config.data.embeddings_csv_path / "user"
+
+    with open(f"{raw_user_dir}/raw_prompts.csv", 'r') as file_:
+        reader = csv.DictReader(file_)
+        prompts = [row['sentence'] for row in reader]
+
+    results = encode_text(prompts)
+    pd.DataFrame(results).to_csv(
+        f"{embs_dir}/all_mini_user_embeddings.csv",
+        index=False
+    )
+
+
+if __name__ == "__main__":
+    data_raw_prompt_user()
