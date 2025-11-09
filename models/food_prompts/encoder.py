@@ -5,6 +5,7 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer
 
 from config import setup_project_paths, load_config, PROJECT_ROOT
+from models.descriptors.clap_prompt_encoder import get_text_embeddings_in_batches
 from models.food_prompts.parser import map_to_fooditem_crossmodal
 from models.food_prompts.typedefs import FoodItemCrossModal, FoodItemCrossModalEncoded
 
@@ -85,5 +86,23 @@ def data_raw_prompt_user() -> None:
     )
 
 
+def encode_clap_crossmodal_results(descriptors: list[str]) -> None:
+    results = get_text_embeddings_in_batches(descriptors)
+    pd.DataFrame(results).to_csv('crossmodal_descriptors_encoded.csv')
+
+
 if __name__ == "__main__":
-    data_raw_prompt_user()
+    # data_raw_prompt_user()
+
+    encode_clap_crossmodal_results([
+        'savory',
+        'hot',
+        'smoky',
+        'happiness',
+        'warmth',
+        'warm',
+        'satisfaction',
+        'spicy',
+        'umami',
+        'juicy',
+    ])
