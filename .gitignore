@@ -216,3 +216,6 @@ terraform/stacks/apps_base/.terraform/
 
 # Temporals
 *.tmp
+
+# Frontend
+node_modules

@@ -1,6 +1,6 @@
 # ------------------ STAGE 1: BUILD ------------------
 FROM node:20-alpine AS build
-WORKDIR /app
+WORKDIR /src
 
 # Copia package.json y package-lock.json para instalar dependencias primero
 COPY package*.json ./
@@ -24,9 +24,9 @@ RUN npm run build
 # ------------------ STAGE 2: RUN --------------------
 FROM nginx:alpine
 # Copia la configuración de Nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY ../nginx.conf /etc/nginx/conf.d/default.conf
 # Copia los archivos estáticos generados por Vite a la carpeta de Nginx
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /src/dist /usr/share/nginx/html
 
 # Nginx expone el puerto 80 por defecto
 EXPOSE 80
