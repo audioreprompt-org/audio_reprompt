@@ -17,12 +17,9 @@ logger = logging.getLogger(__name__)
     status_code=200,
     tags=['Audio'],
     response_model=GenerateAudioResponse,
-    summary="...",
+    summary="Perform the application get a piece of audio given the modified prompt.",
 )
 async def generate_audio(payload: GenerateAudioRequest, request: Request) -> GenerateAudioResponse:
-    """
-    Perform the application get of all vehicle
-    """
     try:
         # Load needed clients
         s3 = request.app.state.s3

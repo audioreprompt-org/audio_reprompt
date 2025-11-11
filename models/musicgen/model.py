@@ -13,7 +13,7 @@ def load_musicgen_pipeline(
     prefer_gpu: bool = True,
     dtype: Optional[torch.dtype] = None,
 ) -> Pipeline:
-    device = "cuda:0" if prefer_gpu and torch.cuda.is_available() else "cpu"
+    device = "cuda" if prefer_gpu and torch.cuda.is_available() else "cpu"
     if dtype is None and device.startswith("cuda"):
         dtype = torch.float16
 
