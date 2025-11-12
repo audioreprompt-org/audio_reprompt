@@ -32,11 +32,11 @@ Survey on associations between sensations, emotions, and tastes of `{}`. Answer 
 4. Texture - top 3 texture terms
 5. Emotions - choose only one: anger, disgust, fear, happiness, sadness, surprise
 6. Color - choose only one: blue, purple, green, brown, red, orange, yellow, white
-7. Taste - choose only one: sweet, bitter, salty, sour
+7. Taste - choose only one of: sweet, bitter, salty, sour
 
 Respond with single terms, comma-separated, formatted as:
 `Chemical flavor profile`|`Human responses`|`Temperature`|`Texture`|`Emotions`|`Color`|`Taste`
-In case the `food_item` is not a food returns only `No Label`. If a dimension cannot be answered, fill that dimension as `No Label`
+In case the `food_item` is not a food returns only `No Label`. If a dimension cannot be answered, fill the dimension as `No Label`
 """
 
 
