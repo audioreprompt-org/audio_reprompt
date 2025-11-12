@@ -1,14 +1,40 @@
 <script setup>
 import { ref, onUnmounted } from "vue";
 
-// 1. Definición de DEFAULT_PROMPT
+// Define event emitter for parent communication (App.vue listens to "generate").
 const emit = defineEmits(["generate"]);
+// Default example text for the prompt input.
 const DEFAULT_PROMPT =
   "E.g. I'm at the food court and I'm gonna eat a bowl of ramen. The space is noisy and the neon signs are bright.";
 
-const promptText = ref(DEFAULT_PROMPT); // Valor inicial para el mockup
-const showError = ref(false);
+// Validation thresholds.
+const MIN_LENGTH = 20; // Minimum number of characters.
+const MAX_LENGTH = 500; // Maximum number of characters.
+const MIN_WORDS = 3; // Minimum number of words (for descriptive prompts).
 
+// Validation toggles.
+const isCharacterLengthEnabled = ref(true); // Enables/disables strict length validation.
+const isSanitizationEnabled = ref(true); // Enables/disables security validation.
+const isLanguageCheckEnabled = ref(true); // Enables/disables English-only check.
+
+// Reactive state for prompt and validation feedback.
+const promptText = ref(DEFAULT_PROMPT);
+const showError = ref(false);
+const errorMessage = ref(
+  "Please, enter a prompt to generate a piece of music."
+);
+
+// Regex patterns to detect XSS, HTML/script injection, SQL commands, or unsafe input.
+const DANGER_PATTERNS = [
+  /<[a-zA-Z\/].*?>/, // HTML or script tags.
+  /SELECT\s/i, // SQL injection keyword.
+  /DROP\s/i, // SQL injection keyword.
+  /DELETE\s/i, // SQL injection keyword.
+  /('|")/, // Quotes potentially closing SQL strings.
+  /;/, // Semicolons chaining shell/SQL commands.
+];
+
+// Rotating loading messages to simulate creative generation progress.
 const messages = [
   "Capturing the mood of your moment…",
   "Listening to your words, feeling the atmosphere…",
@@ -29,23 +55,20 @@ const loadingKey = ref(0);
 let messageTimer = null;
 let initialTimeout = null;
 
-// Función para avanzar al siguiente mensaje
 const advanceMessage = () => {
+  /**
+   * Advances to the next message in the loading cycle.
+   */
   if (currentMessageIndex.value < messages.length - 1) {
     currentMessageIndex.value++;
     currentMessage.value = messages[currentMessageIndex.value];
-  } else {
-    // Opcional: Detener el setInterval inmediatamente si ya llegó al final.
-    // Esto es solo útil si la carga es muy, muy larga.
-    // if (messageTimer) {
-    //     clearInterval(messageTimer);
-    //     messageTimer = null;
-    // }
   }
 };
 
-// Función para detener y limpiar los temporizadores
 const stopMessageRotation = () => {
+  /**
+   * Stops and clears all active timers for message rotation.
+   */
   if (messageTimer) {
     clearInterval(messageTimer);
     messageTimer = null;
@@ -54,33 +77,32 @@ const stopMessageRotation = () => {
     clearTimeout(initialTimeout);
     initialTimeout = null;
   }
-  // Reinicia el mensaje al primero
+  // Reset to the first message.
   currentMessageIndex.value = 0;
   currentMessage.value = messages[0];
 };
 
-// Función para detener y limpiar el temporizador
 const startMessageRotation = () => {
-  // Aseguramos que el reinicio de clave y limpieza ocurra antes del inicio del ciclo
-  loadingKey.value++;
+  /**
+   * Starts cycling through the loading messages during generation.
+   */
+  loadingKey.value++; // Force re-render if loading restarts.
   stopMessageRotation();
 
-  // 1. FORZAR el primer avance del mensaje después de un microsegundo (0ms)
-  // Esto asegura que el mensaje[1] aparezca inmediatamente, y el ciclo continúe desde allí.
+  // Trigger first message quickly after component update.
   initialTimeout = setTimeout(() => {
     advanceMessage(); // Muestra el mensaje[1]
 
-    // 2. Iniciar el ciclo de intervalo para los mensajes subsiguientes
     messageTimer = setInterval(advanceMessage, rotationInterval);
-  }, 10); // 10ms para ejecución inmediata en el siguiente tick.
+  }, 10); // 10ms.
 };
 
-// Limpieza: Asegura que el temporizador se detenga si el componente se desmonta
+// Ensure timers are cleared when component unmounts.
 onUnmounted(() => {
   stopMessageRotation();
 });
 
-// 1. Recibe la prop isLoading de App.vue
+// Receives the `isLoading` prop from the parent (App.vue).
 const props = defineProps({
   isLoading: {
     type: Boolean,
@@ -88,32 +110,137 @@ const props = defineProps({
   },
 });
 
-const submitPrompt = () => {
-  // Limpia el texto para la validación si es el prompt por defecto
-  const cleanedPrompt =
-    promptText.value.trim() === DEFAULT_PROMPT ? "" : promptText.value.trim();
-
-  if (cleanedPrompt.length > 0) {
-    showError.value = false;
-    if (!props.isLoading) {
-      startMessageRotation();
-    }
-    emit("generate", promptText.value.trim());
-  } else {
-    showError.value = true;
+const checkLanguage = (prompt) => {
+  /**
+   * Checks if the prompt is mostly English (simple Latin characters only).
+   * This is a lightweight client-side heuristic.
+   * @param {string} prompt - User input to validate.
+   * @returns {boolean} - True if the text is acceptable, false otherwise.
+   */
+  if (!isLanguageCheckEnabled.value) {
+    return true;
   }
+
+  const latinRegex = /^[a-z0-9\s.,?!'":;@#-]+$/i;
+
+  if (!latinRegex.test(prompt)) {
+    errorMessage.value =
+      "Language Warning: Please ensure your prompt is in English (Latin alphabet only) for optimal results.";
+    return false;
+  }
+  return true;
 };
 
-// 2. Función para borrar el texto al hacer clic (focus)
+const sanitizePrompt = (prompt) => {
+  /**
+   * Detects unsafe input such as HTML, SQL, or script injections.
+   * @param {string} prompt - User input to sanitize.
+   * @returns {boolean} - True if the input is clean, false if dangerous.
+   */
+
+  if (!isSanitizationEnabled.value) {
+    return true;
+  }
+
+  for (const pattern of DANGER_PATTERNS) {
+    if (pattern.test(prompt)) {
+      errorMessage.value =
+        "Security warning: The prompt contains inappropriate or dangerous characters (e.g., HTML tags or script commands). Please use only descriptive text.";
+      return false;
+    }
+  }
+  return true;
+};
+
+const validatePrompt = (prompt) => {
+  /**
+   * Validates the prompt’s length and descriptiveness.
+   * @param {string} prompt - User input after sanitization.
+   * @returns {boolean} - True if valid, false otherwise.
+   */
+  if (!isCharacterLengthEnabled.value) {
+    return true; // Validación desactivada.
+  }
+
+  const charCount = prompt.length;
+  const wordCount = prompt
+    .split(/\s+/)
+    .filter((word) => word.length > 0).length;
+
+  // Check for overly long prompts.
+  if (charCount > MAX_LENGTH) {
+    errorMessage.value = `Prompt is too long (${charCount} characters). Maximum allowed is ${MAX_LENGTH} characters.`;
+    return false;
+  }
+
+  // Check for minimal descriptive input.
+  const passesMinimum = charCount >= MIN_LENGTH || wordCount >= MIN_WORDS;
+
+  if (!passesMinimum) {
+    errorMessage.value = `Prompt is too short. Please provide at least ${MIN_LENGTH} characters or ${MIN_WORDS} descriptive words.`;
+    return false;
+  }
+
+  return true;
+};
+
+const submitPrompt = () => {
+  /**
+   * Main submit handler:
+   * Validates the user prompt and emits the "generate" event if valid.
+   */
+  const userPrompt = promptText.value.trim();
+  const isDefaultPrompt = userPrompt === DEFAULT_PROMPT;
+  const cleanedPrompt = isDefaultPrompt ? "" : userPrompt;
+
+  // 1. Basic empty check.
+  if (cleanedPrompt.length === 0) {
+    errorMessage.value = "Please enter a prompt to generate music.";
+    showError.value = true;
+    return;
+  }
+
+  // 2. Security validation.
+  if (!sanitizePrompt(userPrompt)) {
+    showError.value = true;
+    return;
+  }
+
+  // 3. Language validation.
+  if (!checkLanguage(userPrompt)) {
+    showError.value = true;
+    return;
+  }
+
+  // 4. Length/content validation.
+  if (!validatePrompt(userPrompt)) {
+    showError.value = true;
+    return;
+  }
+
+  // If all checks pass, trigger generation.
+  showError.value = false;
+  if (!props.isLoading) {
+    startMessageRotation();
+  }
+  emit("generate", userPrompt);
+};
+
 const clearPrompt = () => {
+  /**
+   * Clears placeholder text when user focuses the input field.
+   */
   if (promptText.value === DEFAULT_PROMPT) {
     promptText.value = "";
   }
-  showError.value = false; // Oculta el error si el usuario intenta escribir
+  showError.value = false; // Oculta el error si el usuario intenta escribir.
+  errorMessage.value = "Please enter a prompt to generate a piece of music."; // Resetear mensaje.
 };
 
-// 3. Función para restaurar el texto si el input se queda vacío (blur)
 const resetPrompt = () => {
+  /**
+   * Restores default prompt if the field is left empty after blur.
+   */
   if (promptText.value.trim() === "") {
     promptText.value = DEFAULT_PROMPT;
   }
@@ -154,6 +281,22 @@ const resetPrompt = () => {
         moment with?
       </p>
 
+      <!--
+      <div
+        class="text-sm text-white/50 cursor-pointer flex justify-center space-x-6"
+      >
+        <span @click="isLanguageCheckEnabled = !isLanguageCheckEnabled">
+          Length Validation: {{ isLanguageCheckEnabled ? "ON ✅" : "OFF ❌" }}
+        </span>
+        <span @click="isSanitizationEnabled = !isSanitizationEnabled">
+          Security Filter: {{ isSanitizationEnabled ? "ON 🔒" : "OFF 🔓" }}
+        </span>
+        <span @click="isLanguageCheckEnabled = !isLanguageCheckEnabled">
+          Language Check: {{ isLanguageCheckEnabled ? "ON 🌎" : "OFF 🌍" }}
+        </span>
+      </div>
+      -->
+
       <form @submit.prevent="submitPrompt" class="relative px-8">
         <textarea
           v-model="promptText"
@@ -167,7 +310,7 @@ const resetPrompt = () => {
       </form>
 
       <p v-if="showError" class="text-red-400 text-sm mt-2">
-        Please enter a prompt to generate a piece of music.
+        {{ errorMessage }}
       </p>
 
       <button

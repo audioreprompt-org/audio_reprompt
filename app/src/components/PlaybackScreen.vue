@@ -1,12 +1,14 @@
 <script setup>
-import { ref } from "vue";
+import { ref, onMounted, watch } from "vue";
 
-// 1. Definir la prop para recibir los datos de la música
 const props = defineProps({
+  /**
+   * 1. Define prop to receive generated music data from the parent component.
+   *    This includes the original and improved prompts, and the generated audio file URL.
+   */
   musicData: {
     type: Object,
     required: true,
-    // Define un valor por defecto temporal para evitar errores de plantilla mientras se prueba
     default: () => ({
       original_prompt: "Loading original prompt...",
       improved_prompt: "Loading refined prompt...",
@@ -15,35 +17,128 @@ const props = defineProps({
   },
 });
 
-// 2. Definición del evento que el componente padre escuchará
+// 2. Define event to notify the parent component when the user wants to reset and return to the previous screen.
 const emit = defineEmits(["resetAndGoBack"]);
 
-// 3. Estados reactivos y referencias
+// 3. Reactive states and references.
 const isPlaying = ref(false);
 const audioPlayer = ref(null);
 
-// 4. Lógica de reproducción/pausa
-const togglePlay = () => {
-  if (!audioPlayer.value) return;
+const duration = ref(0);
+const current = ref(0);
+const percent = ref(0);
+const displayTime = (s) => {
+  /**
+   * Helper function to format time from seconds to "MM:SS".
+   * @param {number} s - Time in seconds.
+   * @returns {string} - Formatted time string.
+   */
+  if (!Number.isFinite(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${m}:${sec}`;
+};
 
-  if (isPlaying.value) {
-    audioPlayer.value.pause();
-  } else {
-    audioPlayer.value.play().catch((error) => {
-      console.error("Error al reproducir el audio:", error);
-    });
+const audioSrc = ref("");
+
+onMounted(() => {
+  /**
+   * onMounted: Set the initial audio URL when the component loads.
+   */
+  audioSrc.value = props.musicData.audio_url ?? "";
+});
+
+watch(
+  /**
+   * Watcher: Reset the audio player when the received audio URL changes.
+   */
+  () => props.musicData.audio_url,
+  (u) => {
+    audioSrc.value = u ?? "";
+    if (audioPlayer.value) {
+      isPlaying.value = false;
+      audioPlayer.value.pause();
+      audioPlayer.value.load();
+      duration.value = 0;
+      current.value = 0;
+      percent.value = 0;
+    }
   }
-  isPlaying.value = !isPlaying.value;
+);
+
+const togglePlay = async () => {
+  /**
+   * Toggles between play and pause states for the audio player.
+   */
+  const el = audioPlayer.value;
+  if (!el) return;
+  try {
+    if (isPlaying.value) {
+      el.pause();
+      isPlaying.value = false;
+    } else {
+      await el.play();
+      isPlaying.value = true;
+    }
+  } catch (err) {
+    console.error("Error al reproducir el audio:", err);
+  }
 };
 
-// 5. Función de descarga
-const handleDownload = () => {
-  console.log("Iniciando descarga de:", props.musicData.audio_url);
+const onLoadedMetadata = () => {
+  /**
+   * Audio event: Called when metadata (like duration) is available.
+   */
+  duration.value = audioPlayer.value?.duration ?? 0;
 };
 
-// 6. Nueva función para volver y resetear
+const onTimeUpdate = () => {
+  /**
+   * Audio event: Updates the current playback time and progress percentage.
+   */
+  current.value = audioPlayer.value?.currentTime ?? 0;
+  if (duration.value) {
+    percent.value = (current.value / duration.value) * 100;
+  }
+};
+
+const onEnded = () => {
+  /**
+   * Audio event: Triggered when playback finishes.
+   */
+  isPlaying.value = false;
+};
+
+const handleDownload = async () => {
+  /**
+   * 5. Function to handle music file download.
+   * Fetches the audio blob and triggers a local download in the browser.
+   */
+  const url = props.musicData.audio_url;
+  if (!url || url === "#") return;
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    // choose extension that matches your Content-Type (audio/wav, audio/mpeg, etc.)
+    a.download = "generated_music.wav";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    console.error("Fallo la descarga:", e);
+  }
+};
+
 const goBackAndReset = () => {
-  // Asegurarse de pausar el audio al salir
+  /**
+   * 6. Function to pause audio (if playing) and notify parent to reset UI.
+   */
   if (audioPlayer.value && isPlaying.value) {
     audioPlayer.value.pause();
   }
@@ -102,6 +197,16 @@ const goBackAndReset = () => {
         </div>
       </div>
 
+      <audio
+        ref="audioPlayer"
+        :src="audioSrc"
+        preload="metadata"
+        crossorigin="anonymous"
+        @loadedmetadata="onLoadedMetadata"
+        @timeupdate="onTimeUpdate"
+        @ended="onEnded"
+      ></audio>
+
       <div class="flex items-center w-full space-x-4 px-8">
         <button
           @click="togglePlay"
@@ -123,22 +228,20 @@ const goBackAndReset = () => {
             type="range"
             min="0"
             max="100"
-            value="30"
+            :value="percent"
+            @input="onSeek"
             class="w-full h-2 rounded-lg appearance-none cursor-pointer"
           />
-          <span class="text-sm text-purple-300 whitespace-nowrap"
-            >0:32 / 3:45</span
-          >
+          <span class="text-sm text-purple-300 whitespace-nowrap">
+            {{ displayTime(current) }} / {{ displayTime(duration) }}
+          </span>
         </div>
       </div>
 
-      <div class="h-10 flex justify-center items-center mt-4"></div>
-
       <div class="flex justify-center space-x-12 mt-8">
         <a
-          :href="props.musicData.audio_url"
+          :href="musicData.audio_url"
           @click="handleDownload"
-          download="generated_music.mp3"
           class="py-4 px-8 text-xl font-bold rounded-full transition duration-300 transform hover:scale-[1.03] shadow-2xl inline-block"
           style="
             background: linear-gradient(135deg, #7e22ce 0%, #4f46e5 100%);
