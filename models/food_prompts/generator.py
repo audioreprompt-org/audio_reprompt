@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 MODEL_GTP_40_MINI = "gpt-4o-mini-2024-07-18"
-BATCH_SIZE = 100
+BATCH_SIZE = 20
 
 
 PROMPT_V1 = """
@@ -28,15 +28,15 @@ Survey on associations between sensations, emotions, and tastes of `{}`. Answer 
 
 1. Chemical flavor profile - top 3 sensation terms
 2. Human responses - top 3 physiological effects
-3. Temperature - choose: hot, warm, cold, iced
+3. Temperature - choose only one: hot, warm, cold, iced
 4. Texture - top 3 texture terms
-5. Emotions - choose: anger, disgust, fear, happiness, sadness, surprise
-6. Color - choose: black, blue, brown, green, gray, orange, pink, purple, red, white, yellow
-7. Taste - choose: sweet, bitter, salty, sour
+5. Emotions - choose only one: anger, disgust, fear, happiness, sadness, surprise
+6. Color - choose only one: blue, purple, green, brown, red, orange, yellow, white
+7. Taste - choose only one: sweet, bitter, salty, sour
 
 Respond with single terms, comma-separated, formatted as:
-Chemical flavor profile|Human responses|Temperature|Texture|Emotions|Color|Taste
-In case the `food_item` is not a food returns only `No Label`. If any dimension cannot be answered, use the label `No Label`
+`Chemical flavor profile`|`Human responses`|`Temperature`|`Texture`|`Emotions`|`Color`|`Taste`
+In case the `food_item` is not a food returns only `No Label`. If a dimension cannot be answered, fill that dimension as `No Label`
 """
 
 
@@ -125,7 +125,8 @@ def read_food_csv_items(file: str, column_name: str, do_sample: bool = False, n_
         reader = DictReader(file_)
         items = {row[column_name] for row in reader}
 
-    return random.sample(list(items), n_sample) if do_sample else items
+    filtered = list(filter(lambda item: 'raw' not in item, items))
+    return random.sample(filtered, n_sample) if do_sample else items
 
 
 if __name__ == '__main__':
@@ -141,12 +142,12 @@ if __name__ == '__main__':
         f"{FOOD_VOCAB_PATH}/food_nutrition_vocabulary.csv",
         "food",
         True,
-        500
+        100
     )
 
-    # option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
+    option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
     # option = BatchOptionEnum.OPTION_COLLECT_BATCHES
-    option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
+    # option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
 
     match option:
         case BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE:
