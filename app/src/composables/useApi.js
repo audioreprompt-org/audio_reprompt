@@ -23,7 +23,7 @@ export function useApi() {
       };
 
       // 2. Simular un tiempo de latencia de 3 segundos (para ver el progreso)
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 30000));
 
       // 3. Asignar datos simulados
       data.value = mockData;

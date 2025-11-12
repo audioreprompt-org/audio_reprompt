@@ -61,9 +61,9 @@ const goBackAndReset = () => {
         /* Ajuste para simular un remolino más pronunciado */
         background-image: radial-gradient(
           circle at 50% 25%,
-          /* Centro un poco más arriba */ rgba(167, 139, 250, 0.4) 0%,
+          /* Centro un poco más arriba */ rgba(88, 34, 250, 0.2) 0%,
           /* light-purple, más claro en el centro */ rgba(126, 34, 206, 0.5) 15%,
-          /* main-purple, para la espiral intermedia */ rgba(79, 70, 229, 0.6)
+          /* main-purple, para la espiral intermedia */ rgba(17, 4, 152, 0.6)
             30%,
           /* main-blue, para la espiral exterior */ rgba(13, 1, 31, 1) 70%
             /* dark-bg, para el fondo oscuro */
@@ -76,25 +76,27 @@ const goBackAndReset = () => {
     <div
       class="relative z-10 max-w-4xl w-full text-center mt-24 flex flex-col items-center space-y-16"
     >
-      <h1 class="text-4xl font-extrabold tracking-tight mb-8 text-white">
+      <h1
+        class="text-4xl font-extrabold tracking-tight mb-8 text-white [text-shadow:_0_0_4px_rgba(168,85,247,0.35),_0_0_8px_rgba(168,85,247,0.25)]"
+      >
         Our system has associated you with this piece of music
       </h1>
 
       <div class="w-full flex justify-between space-x-4 px-4 mb-8">
         <div
-          class="w-[47%] p-4 bg-white/40 rounded-lg shadow-md border border-white/20 text-left transition duration-300 transform hover:scale-[1.06]"
+          class="w-[47%] p-4 bg-black/40 rounded-lg shadow-md border border-white/20 text-left cursor-pointer transition duration-300 transform hover:scale-[1.09]"
         >
           <h3 class="text-sm font-bold text-gray-200 mb-1">ORIGINAL PROMPT:</h3>
-          <p class="text-xs text-black">
+          <p class="text-xs text-white">
             {{ props.musicData.original_prompt }}
           </p>
         </div>
 
         <div
-          class="w-[47%] p-4 bg-white/40 rounded-lg shadow-md border border-white/20 text-left transition duration-300 transform hover:scale-[1.06]"
+          class="w-[47%] p-4 bg-black/40 rounded-lg shadow-md border border-white/20 text-left cursor-pointer transition duration-300 transform hover:scale-[1.09]"
         >
           <h3 class="text-sm font-bold text-gray-200 mb-1">REFINED PROMPT:</h3>
-          <p class="text-xs text-black">
+          <p class="text-xs text-white">
             {{ props.musicData.improved_prompt }}
           </p>
         </div>
@@ -160,7 +162,7 @@ const goBackAndReset = () => {
     </div>
   </div>
   <footer
-    class="w-full relative z-10 py-8 bg-black/30 backdrop-blur-sm border-t border-purple-500/20"
+    class="w-full relative z-10 py-8 bg-black backdrop-blur-sm border-t border-purple-500/20"
   >
     <div class="max-w-4xl mx-auto text-center px-6 text-sm text-purple-400">
       <div class="space-y-2">
@@ -168,6 +170,9 @@ const goBackAndReset = () => {
           &copy; 2025 Audio Reprompting Project
         </p>
         <p class="text-purple-400">Universidad de Los Andes</p>
+        <p class="text-purple-400">
+          Master's Degree in Artificial Intelligence
+        </p>
       </div>
 
       <div class="mt-6">

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from "vue";
+import { ref, onUnmounted } from "vue";
 
 // 1. Definición de DEFAULT_PROMPT
 const emit = defineEmits(["generate"]);
@@ -8,6 +8,77 @@ const DEFAULT_PROMPT =
 
 const promptText = ref(DEFAULT_PROMPT); // Valor inicial para el mockup
 const showError = ref(false);
+
+const messages = [
+  "Capturing the mood of your moment…",
+  "Listening to your words, feeling the atmosphere…",
+  "Translating your scene into melodies and textures…",
+  "Shaping harmonies that match your story…",
+  "Mixing sounds that taste like your emotions…",
+  "Balancing rhythm and ambience…",
+  "Adding a touch of warmth and depth to the composition…",
+  "Letting the music breathe your moment…",
+  "Almost finished, I'm working on the final notes……",
+  "Your soundscape is ready to unfold…",
+];
+
+const currentMessageIndex = ref(0);
+const currentMessage = ref(messages[0]);
+const rotationInterval = 3500;
+const loadingKey = ref(0);
+let messageTimer = null;
+let initialTimeout = null;
+
+// Función para avanzar al siguiente mensaje
+const advanceMessage = () => {
+  if (currentMessageIndex.value < messages.length - 1) {
+    currentMessageIndex.value++;
+    currentMessage.value = messages[currentMessageIndex.value];
+  } else {
+    // Opcional: Detener el setInterval inmediatamente si ya llegó al final.
+    // Esto es solo útil si la carga es muy, muy larga.
+    // if (messageTimer) {
+    //     clearInterval(messageTimer);
+    //     messageTimer = null;
+    // }
+  }
+};
+
+// Función para detener y limpiar los temporizadores
+const stopMessageRotation = () => {
+  if (messageTimer) {
+    clearInterval(messageTimer);
+    messageTimer = null;
+  }
+  if (initialTimeout) {
+    clearTimeout(initialTimeout);
+    initialTimeout = null;
+  }
+  // Reinicia el mensaje al primero
+  currentMessageIndex.value = 0;
+  currentMessage.value = messages[0];
+};
+
+// Función para detener y limpiar el temporizador
+const startMessageRotation = () => {
+  // Aseguramos que el reinicio de clave y limpieza ocurra antes del inicio del ciclo
+  loadingKey.value++;
+  stopMessageRotation();
+
+  // 1. FORZAR el primer avance del mensaje después de un microsegundo (0ms)
+  // Esto asegura que el mensaje[1] aparezca inmediatamente, y el ciclo continúe desde allí.
+  initialTimeout = setTimeout(() => {
+    advanceMessage(); // Muestra el mensaje[1]
+
+    // 2. Iniciar el ciclo de intervalo para los mensajes subsiguientes
+    messageTimer = setInterval(advanceMessage, rotationInterval);
+  }, 10); // 10ms para ejecución inmediata en el siguiente tick.
+};
+
+// Limpieza: Asegura que el temporizador se detenga si el componente se desmonta
+onUnmounted(() => {
+  stopMessageRotation();
+});
 
 // 1. Recibe la prop isLoading de App.vue
 const props = defineProps({
@@ -24,6 +95,9 @@ const submitPrompt = () => {
 
   if (cleanedPrompt.length > 0) {
     showError.value = false;
+    if (!props.isLoading) {
+      startMessageRotation();
+    }
     emit("generate", promptText.value.trim());
   } else {
     showError.value = true;
@@ -56,9 +130,9 @@ const resetPrompt = () => {
         /* Ajuste para simular un remolino más pronunciado */
         background-image: radial-gradient(
           circle at 50% 25%,
-          /* Centro un poco más arriba */ rgba(167, 139, 250, 0.4) 0%,
+          /* Centro un poco más arriba */ rgba(88, 34, 250, 0.2) 0%,
           /* light-purple, más claro en el centro */ rgba(126, 34, 206, 0.5) 15%,
-          /* main-purple, para la espiral intermedia */ rgba(79, 70, 229, 0.6)
+          /* main-purple, para la espiral intermedia */ rgba(17, 4, 152, 0.6)
             30%,
           /* main-blue, para la espiral exterior */ rgba(13, 1, 31, 1) 70%
             /* dark-bg, para el fondo oscuro */
@@ -69,11 +143,13 @@ const resetPrompt = () => {
     ></div>
 
     <div class="relative z-10 max-w-4xl w-full text-center mt-10 space-y-16">
-      <h1 class="text-4xl font-extrabold tracking-tight mb-20 text-white">
-        Imagine the piece of music to accompany your meal
+      <h1
+        class="text-4xl font-extrabold tracking-tight mb-20 text-white [text-shadow:_0_0_4px_rgba(168,85,247,0.35),_0_0_8px_rgba(168,85,247,0.25)]"
+      >
+        Imagine a piece of music to accompany your meal
       </h1>
 
-      <p class="text-xl text-white px-4">
+      <p class="text-xl text-white px-6">
         Where are you, what are you going to eat, and who are you sharing this
         moment with?
       </p>
@@ -105,23 +181,46 @@ const resetPrompt = () => {
 
       <div
         v-if="props.isLoading"
-        class="flex justify-center items-center h-8 space-x-4 mt-4 text-7xl font-bold"
+        :key="loadingKey"
+        class="flex flex-col items-center space-y-8"
       >
-        <span class="text-main-blue animate-pulse" style="animation-delay: 0s">
-          &#9835;
-        </span>
-        <span
-          class="text-main-purple animate-pulse"
-          style="animation-delay: 0.2s"
+        <div
+          class="flex justify-center items-center space-x-6 mt-2 text-7xl font-bold [filter:drop-shadow(0_0_10px_rgb(167,139,250))_drop-shadow(0_0_10px_rgb(79,70,229))]"
         >
-          &#9836;
-        </span>
-        <span
-          class="text-light-purple animate-pulse"
-          style="animation-delay: 0.4s"
-        >
-          &#9835;
-        </span>
+          <span
+            class="text-main-blue animate-pulse [text-shadow:_0_0_1px_#000000]"
+            style="animation-delay: 0s"
+          >
+            &#9839;
+          </span>
+          <span
+            class="text-main-purple animate-pulse [text-shadow:_0_0_1px_#000000]"
+            style="animation-delay: 0.15s"
+          >
+            &#9836;
+          </span>
+          <span
+            class="text-light-purple animate-pulse [text-shadow:_0_0_1px_#000000]"
+            style="animation-delay: 0.3s"
+          >
+            &#9835;
+          </span>
+          <span
+            class="text-main-blue animate-pulse [text-shadow:_0_0_1px_#000000]"
+            style="animation-delay: 0.45s"
+          >
+            &#9837;
+          </span>
+          <span
+            class="text-main-purple animate-pulse [text-shadow:_0_0_1px_#000000]"
+            style="animation-delay: 0.6s"
+          >
+            &#119070;
+          </span>
+        </div>
+        <p class="text-lg text-purple-300 font-semibold">
+          {{ currentMessage }}
+        </p>
       </div>
 
       <div class="h-16 flex justify-center items-center">
