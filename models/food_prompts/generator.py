@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 MODEL_GTP_40_MINI = "gpt-4o-mini-2024-07-18"
-BATCH_SIZE = 20
+BATCH_SIZE = 100
 
 
 PROMPT_V1 = """
@@ -146,7 +146,7 @@ def read_food_csv_items(file: str, column_name: str, do_sample: bool = False, n_
         items = {row[column_name] for row in reader}
 
     filtered = list(filter(lambda item: 'raw' not in item, items))
-    return random.sample(filtered, n_sample) if do_sample else items
+    return random.sample(filtered, min(n_sample, len(filtered))) if do_sample else items
 
 
 if __name__ == '__main__':
@@ -159,15 +159,16 @@ if __name__ == '__main__':
     FOOD_PROMPTS_PATH.mkdir(parents=True, exist_ok=True)
 
     food_items = read_food_csv_items(
-        f"{FOOD_VOCAB_PATH}/food_nutrition_vocabulary.csv",
+        # f"{FOOD_VOCAB_PATH}/food_nutrition_vocabulary.csv",
+        f"{FOOD_VOCAB_PATH}/food_curated_sample.csv",
         "food",
         True,
         100
     )
 
-    # option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
+    option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
     # option = BatchOptionEnum.OPTION_COLLECT_BATCHES
-    option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
+    # option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
 
     match option:
         case BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE:
