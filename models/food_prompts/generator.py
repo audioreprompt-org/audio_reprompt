@@ -40,6 +40,26 @@ In case the `food_item` is not a food returns only `No Label`. If a dimension ca
 """
 
 
+PROMPT_V2 = """
+For {}, return exactly one line: f1|f2|f3|f4|f5|f6|f7.
+No headers, labels, explanations, quotes, or backticks.
+English, lowercase. Single words only.
+If not a food or drink: No Label. If a field is unknown: No Label. 
+Use "|" with no spaces; in f1,f2,f4 list exactly 3 distinct terms separated by ", ".
+Don’t guess; no off-list choices; no cultural/brand/health inferences.
+
+Fields:
+1 chemical flavor profile (3 sensory terms)
+2 human responses (3 physiological effects)
+3 temperature: [hot, warm, cold, iced]
+4 texture (3 tactile terms)
+5 emotion: [anger, disgust, fear, happiness, sadness, surprise]
+6 color: [blue, purple, green, brown, red, orange, yellow, white]
+7 taste: [sweet, bitter, salty, sour]
+
+"""
+
+
 class BatchOptionEnum(Enum):
     OPTION_PUT_BATCHES_ON_QUEUE = "put_batches_on_queue"
     OPTION_COLLECT_BATCHES = "collect_batches"
@@ -145,14 +165,14 @@ if __name__ == '__main__':
         100
     )
 
-    option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
+    # option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
     # option = BatchOptionEnum.OPTION_COLLECT_BATCHES
-    # option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
+    option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
 
     match option:
         case BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE:
             for sample_part in chunks(food_items, BATCH_SIZE):
-                put_batch_get_food_captions(sample_part, MODEL_GTP_40_MINI, PROMPT_V1)
+                put_batch_get_food_captions(sample_part, MODEL_GTP_40_MINI, PROMPT_V2)
 
         case BatchOptionEnum.OPTION_COLLECT_BATCHES:
             for batch_file in glob.glob('batch_requests_*.csv'):

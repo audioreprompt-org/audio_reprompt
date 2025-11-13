@@ -106,6 +106,8 @@ def collect_food_results(
                     ]
                 ].to_dict(orient="records")
             )
+        else:
+            return
 
     (
         pd.DataFrame(results)
