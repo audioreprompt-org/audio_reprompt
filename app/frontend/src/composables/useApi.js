@@ -11,6 +11,33 @@ export function useApi() {
     loading.value = true;
     error.value = null;
     try {
+      const response = await fetch(`${API_BASE_URL}/audio/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!response.ok) throw new Error("Error al generar la música.");
+      data.value = await response.json();
+      data.value.original_prompt = prompt;
+    } catch (err) {
+      error.value = err.message;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  return { data, error, loading, generateMusic };
+}
+
+/**
+export function useApi() {
+  const data = ref(null);
+  const error = ref(null);
+  const loading = ref(false);
+  const generateMusic = async (prompt) => {
+    loading.value = true;
+    error.value = null;
+    try {
       // Simula la llamada al backend de FastAPI
 
       const mockData = {
@@ -37,6 +64,7 @@ export function useApi() {
       if (!response.ok) throw new Error("Error al generar la música.");
       data.value = await response.json();
       */
+/**
     } catch (err) {
       error.value = err.message;
     } finally {
@@ -46,3 +74,4 @@ export function useApi() {
 
   return { data, error, loading, generateMusic };
 }
+*/

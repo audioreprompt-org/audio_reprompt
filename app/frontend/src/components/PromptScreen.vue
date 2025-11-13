@@ -30,27 +30,21 @@ const DANGER_PATTERNS = [
   /SELECT\s/i, // SQL injection keyword.
   /DROP\s/i, // SQL injection keyword.
   /DELETE\s/i, // SQL injection keyword.
-  /('|")/, // Quotes potentially closing SQL strings.
   /;/, // Semicolons chaining shell/SQL commands.
 ];
 
 // Rotating loading messages to simulate creative generation progress.
 const messages = [
-  "Capturing the mood of your moment…",
-  "Listening to your words, feeling the atmosphere…",
   "Translating your scene into melodies and textures…",
   "Shaping harmonies that match your story…",
-  "Mixing sounds that taste like your emotions…",
   "Balancing rhythm and ambience…",
-  "Adding a touch of warmth and depth to the composition…",
-  "Letting the music breathe your moment…",
   "Almost finished, I'm working on the final notes……",
   "Your soundscape is ready to unfold…",
 ];
 
 const currentMessageIndex = ref(0);
 const currentMessage = ref(messages[0]);
-const rotationInterval = 3500;
+const rotationInterval = 6500;
 const loadingKey = ref(0);
 let messageTimer = null;
 let initialTimeout = null;

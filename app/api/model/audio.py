@@ -13,4 +13,4 @@ class GenerateAudioResponse(BaseModel):
     """Server returns an id, the improved prompt, and a presigned URL to the audio."""
     audio_id: UUID4 = Field(default_factory=uuid4)
     improved_prompt: str
-    audio_url: HttpUrl
+    audio_url: HttpUrl | str

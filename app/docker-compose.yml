@@ -3,29 +3,39 @@ services:
   frontend:
     # Construye a partir del Dockerfile en el directorio actual
     build:
-      context: .
+      context: ./frontend
+      dockerfile: Dockerfile
       args:
         # Pasa la URL de la API al frontend en el proceso de build de Vite
-        VITE_API_URL: http://backend:8000
+        VITE_API_URL: http://localhost:8000
     ports:
       # Mapea el puerto 80 del contenedor al puerto 5173 del host
       - "5173:80"
-    #depends_on:
-    #  - backend
+    depends_on:
+      - backend
     # Reinicia si falla
     restart: always
 
   # Servicio Backend (FastAPI)
-  #backend:
-  #  # Construye a partir de la carpeta backend
-  #  build:
-  #    context: ./backend
-  #  # Comando de inicio de Uvicorn para FastAPI
-  #  command: uvicorn main:app --host 0.0.0.0 --port 8000
-  #  ports:
-  #    # Mapea el puerto 8000 del contenedor al puerto 8000 del host (opcional, para depuración)
-  #    - "8000:8000"
-  #  # Monta la carpeta backend para desarrollo en caliente (hot reload)
-  #  volumes:
-  #    - ./backend:/app
-  #  restart: always
+  backend:
+    # Construye a partir de la carpeta backend
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    # Comando de inicio de Uvicorn para FastAPI
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports:
+      # Mapea el puerto 8000 del contenedor al puerto 8000 del host (opcional, para depuración)
+      - "8000:8000"
+    # Monta la carpeta backend para desarrollo en caliente (hot reload)
+    volumes:
+      # 1. Código de la API (main.py, routes, etc.)
+      - ./api:/app
+      # 2. Módulos compartidos (acceso a audio_reprompt/models)
+      - ../config:/app/config
+      # 3. Módulos de configuración (acceso a audio_reprompt/config)
+      - ../models:/app/models
+      # 4. ARCHIVO DE CONFIGURACIÓN CLAVE: MOUTEAR config.yaml en /app/
+      - ../config.yaml:/app/config.yaml
+      - ../data:/app/data
+    restart: always
