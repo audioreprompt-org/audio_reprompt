@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, Path
+from fastapi import APIRouter, HTTPException, Request
 from uuid import uuid4, UUID
 
 from starlette.responses import FileResponse
@@ -42,7 +42,10 @@ async def generate_audio(
     payload: GenerateAudioRequest, request: Request
 ) -> GenerateAudioResponse:
     try:
-        # Generate audio identifier
+        # Load needed clients.
+        s3 = request.app.state.s3
+        musicgen = request.app.state.synthesizer
+        # Generate audio identifier.
         audio_id = uuid4()
 
         # Improve the prompt
@@ -60,10 +63,6 @@ async def generate_audio(
                 improved_prompt=improved,
                 audio_url=download_url,
             )
-
-        # Load needed clients
-        s3 = request.app.state.s3
-        musicgen = request.app.state.synthesizer
 
         # Generate the audio with the prompt
         audio_buffer = generate_audio_buffer_from_prompt(improved, synthesiser=musicgen)

@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     state = cast(State, app.state)
     # TODO: Take the bucket and region for the config
     state.s3 = S3Client(bucket=ENV_CFG.bucket_name, region=ENV_CFG.aws_region)
-    # state.synthesizer = load_musicgen_pipeline()
+    state.synthesizer = load_musicgen_pipeline()
     yield
 
 
