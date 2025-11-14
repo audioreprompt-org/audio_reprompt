@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audio-reprompt-api-deployment
+  labels:
+    app: audio-reprompt-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: audio-reprompt-api
+  template:
+    metadata:
+      labels:
+        app: audio-reprompt-api
+    spec:
+      containers:
+        - name: audio-reprompt-api
+          image: audio-reprompt-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          # 1. Variables de entorno generales del ConfigMap.
+          env:
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: audio-reprompt-config
+                  key: AWS_REGION
+            - name: BUCKET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: audio-reprompt-config
+                  key: BUCKET_NAME
+            - name: PORT
+              value: "8000"
+          # 2. Definición de montajes de volúmenes (para config.yaml, models, data).
+          volumeMounts:
+            # Montaje para /app/config.yaml (como un archivo, no como carpeta).
+            - name: config-yaml-volume
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+            # Montaje del PVC para modelos y datos.
+            - name: models-data-volume
+              mountPath: /app/models
+              subPath: models # Monta solo la subcarpeta 'models' del PVC.
+            - name: models-data-volume
+              mountPath: /app/data
+              subPath: data # Monta solo la subcarpeta 'data' del PVC.
+            - name: models-data-volume
+              mountPath: /app/config
+              subPath: config # Monta solo la subcarpeta 'config' del PVC.
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+      # 3. Definición de Volúmenes.
+      volumes:
+        # Volumen para config.yaml (se obtiene del ConfigMap).
+        - name: config-yaml-volume
+          configMap:
+            name: audio-reprompt-config
+            items:
+              - key: config.yaml
+                path: config.yaml
+        # Volumen persistente para modelos y datos.
+        - name: models-data-volume
+          persistentVolumeClaim:
+            claimName: audio-reprompt-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: audio-reprompt-service
+  labels:
+    app: audio-reprompt-service
+spec:
+  type: ClusterIP
+  selector:
+    app: audio-reprompt-api
+  ports:
+    - protocol: TCP
+      port: 8000 # Puerto del Service.
+      targetPort: 8000 # Puerto del Contenedor.
