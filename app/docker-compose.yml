@@ -38,4 +38,6 @@ services:
       # 4. ARCHIVO DE CONFIGURACIÓN CLAVE: MOUTEAR config.yaml en /app/
       - ../config.yaml:/app/config.yaml
       - ../data:/app/data
+    environment:
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
     restart: always

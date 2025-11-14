@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import io
@@ -50,17 +51,21 @@ def generate_audio_from_prompts(
     return results
 
 
-def generate_audio_buffer_from_prompt(text_prompt, synthesiser) -> io.BytesIO:
-    # 1. Generar la música con el modelo.
-    # output es un diccionario: audio(array NumPy con la señal de audio) y sampling_rate (frecuencia de muestreo del modelo).
+
+def generate_audio_base64_from_prompt(text_prompt, synthesiser) -> str:
+    # 1. Ejecutar el modelo con el prompt de texto
     output = synthesiser(text_prompt, forward_params={"do_sample": True})
 
-    # 2. Extraer datos del audio.
-    audio_data = output["audio"]  # La onda de sonido (las muestras del audio).
-    sr = output.get("sampling_rate")  # La frecuencia de muestreo reportada por el modelo.
+    # 2. Extraer los datos de audio y la frecuencia de muestreo
+    audio_data = output["audio"]            # np.ndarray con las muestras de audio
+    sr = output.get("sampling_rate")        # Frecuencia de muestreo (int)
 
+    # 3. Escribir el WAV en un buffer en memoria (BytesIO)
     buf = io.BytesIO()
     wav_write(buf, sr, audio_data)
     buf.seek(0)
 
-    return buf
+    # 4. Convertir el contenido del buffer a base64
+    audio_bytes = buf.read()
+    audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+    return audio_b64
