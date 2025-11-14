@@ -159,8 +159,7 @@ if __name__ == '__main__':
     FOOD_PROMPTS_PATH.mkdir(parents=True, exist_ok=True)
 
     food_items = read_food_csv_items(
-        # f"{FOOD_VOCAB_PATH}/food_nutrition_vocabulary.csv",
-        f"{FOOD_VOCAB_PATH}/food_curated_sample.csv",
+        f"{FOOD_VOCAB_PATH}/food_nutrition_vocabulary.csv",
         "food",
         True,
         100

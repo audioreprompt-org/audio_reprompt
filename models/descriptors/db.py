@@ -3,6 +3,7 @@ import glob
 import json
 import logging
 import os
+from csv import DictReader
 from enum import Enum
 from typing import Iterable, Sequence
 
@@ -15,7 +16,7 @@ from pydantic import BaseModel
 
 from models.food_prompts.encoder import (
     parse_food_crossmodal_items,
-    encode_food_crossmodal_items,
+    encode_food_crossmodal_items, encode_text,
 )
 from models.food_prompts.typedefs import FoodItemCrossModalEncoded
 from models.food_prompts.utils import chunks
@@ -85,7 +86,7 @@ def create_audio_descriptors_table() -> None:
         create table if not exists {table_name} (
             id bigserial primary key,
             caption text unique not null,
-            embedding vector(512) not null
+            embedding vector(384) not null
         )"""
         ).format(table_name=sql.Identifier(AUDIO_DESCRIPTOR_TABLE_NAME))
 
@@ -393,19 +394,16 @@ def insert_crossmodal_food_embeddings(
 def load_audio_descriptor_items() -> list[AudioDescriptorItem]:
     audio_caps_items = []
     file_path = os.getcwd() + "/data/docs/audio_caps_embeddings.csv"
-    descriptors, embeddings = [], []
 
     with open(file_path, "r") as f:
-        csv_reader = csv.reader(f)
-        next(csv_reader)  # skip header
+        dict_reader = DictReader(f)
+        descriptors = [row['text'] for row in dict_reader]
 
-        for row in csv_reader:
-            descriptors.append(row[0])
-            embeddings.append(np.array(json.loads(row[1])))
+    embeddings_items: list[dict[str, str|list[float]]] = encode_text(descriptors)
 
-    for descriptor, embedding in zip(descriptors, embeddings):
+    for item in embeddings_items:
         audio_caps_items.append(
-            AudioDescriptorItem(caption=descriptor, clap_embedding=embedding.tolist())
+            AudioDescriptorItem(caption=item["prompt"], clap_embedding=item["text_embedding"])
         )
 
     return audio_caps_items
@@ -482,7 +480,7 @@ def load_and_insert_crossmodal_food_embeddings():
 
 if __name__ == "__main__":
     # set manual option
-    option = ExecutionOption.INSERT_CROSSMODAL_FOOD_EMBEDDINGS
+    option = ExecutionOption.INSERT_AUDIO_DESCRIPTORS
 
     match option:
         case ExecutionOption.INSERT_GUEDES_AUDIO_EMBEDDINGS:
