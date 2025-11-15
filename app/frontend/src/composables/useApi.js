@@ -1,7 +1,7 @@
 import { ref } from "vue";
 
 // Define la URL base de la API (se inyectará en tiempo de compilación/Docker)
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 export function useApi() {
   const data = ref(null);

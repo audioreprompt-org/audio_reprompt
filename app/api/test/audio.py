@@ -5,10 +5,10 @@ from uuid import UUID
 import base64
 
 from fastapi import HTTPException
-from typing import Final
 
-GENERATED_DIR: Final[Path] = Path("data/tracks/generated_base_music")
-TMP_CACHE_DIR: Final[Path] = Path("/tmp/audio_cache")
+ROOT_DIR = Path.cwd()
+GENERATED_DIR = ROOT_DIR / "data"
+TMP_CACHE_DIR = ROOT_DIR / "tmp" / "audio_cache"
 
 
 def generate_local_fake_audio(audio_id: UUID) -> str:

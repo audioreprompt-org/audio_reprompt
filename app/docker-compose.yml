@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Pasa la URL de la API al frontend en el proceso de build de Vite
-        VITE_API_URL: http://localhost:8000
+        VITE_API_URL: ${VITE_API_URL}
     ports:
       # Mapea el puerto 80 del contenedor al puerto 5173 del host
       - "5173:80"
@@ -27,17 +27,7 @@ services:
     ports:
       # Mapea el puerto 8000 del contenedor al puerto 8000 del host (opcional, para depuración)
       - "8000:8000"
-    # Monta la carpeta backend para desarrollo en caliente (hot reload)
-    volumes:
-      # 1. Código de la API (main.py, routes, etc.)
-      - ./api:/app
-      # 2. Módulos compartidos (acceso a audio_reprompt/models)
-      - ../config:/app/config
-      # 3. Módulos de configuración (acceso a audio_reprompt/config)
-      - ../models:/app/models
-      # 4. ARCHIVO DE CONFIGURACIÓN CLAVE: MOUTEAR config.yaml en /app/
-      - ../config.yaml:/app/config.yaml
-      - ../data:/app/data
     environment:
       - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - MOCKED_RESPONSE=false
     restart: always

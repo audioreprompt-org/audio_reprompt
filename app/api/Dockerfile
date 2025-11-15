@@ -1,5 +1,3 @@
-# /audio_reprompt/app/api/Dockerfile
-# ------------------ STAGE 1: BACKEND ------------------
 FROM python:3.11-slim
 
 # Establecer la variable de entorno
@@ -10,16 +8,16 @@ ENV PYTHONUNBUFFERED 1
 WORKDIR /app
 
 # Copiar el archivo de dependencias (asumiendo que tienes un requirements.txt en /app/api)
-# NOTA: Si no tienes requirements.txt, debes crearlo.
 COPY requirements.txt .
 
 # Instalar dependencias
-# (Asegúrate de que tus dependencias como uvicorn, fastapi, etc., estén aquí)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar todo el código de la API al directorio de trabajo
-# (Copia main.py, routes, models, clients, etc.)
+# Copiar el código de la API al directorio de trabajo
 COPY . .
 
 # Exponer el puerto
 EXPOSE 8000
+
+# Entrypoint
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

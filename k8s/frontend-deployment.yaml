@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend-app-deployment
+  name: frontend-deployment
   labels:
-    app: frontend-app
+    app: frontend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: frontend-app
+      app: frontend
   template:
     metadata:
       labels:
-        app: frontend-app
+        app: frontend
     spec:
       containers:
-        - name: frontend-app
-          image: ${AWS_REGISTRY}frontend:1.0.0
+        - name: frontend
+          image: 432555842725.dkr.ecr.us-east-1.amazonaws.com/uniandes/tasty-frontend
           ports:
             - containerPort: 80
           livenessProbe:
@@ -39,12 +39,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: frontend-app-service
+  name: frontend-service
   labels:
-    app: frontend-app-service
+    app: frontend-service
 spec:
   selector:
-    app: frontend-app
+    app: frontend
   ports:
     - protocol: TCP
       port: 80

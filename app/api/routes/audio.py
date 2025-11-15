@@ -1,4 +1,5 @@
 import logging
+import os
 
 from fastapi import APIRouter, HTTPException, Request
 from uuid import uuid4
@@ -13,7 +14,7 @@ from clients.runpod import call_runpod_musicgen
 app_audio = APIRouter(prefix="/audio")
 logger = logging.getLogger(__name__)
 
-MOCKED_RESPONSE = True
+MOCKED_RESPONSE = os.getenv("MOCKED_RESPONSE", "true").lower() == "true"
 
 
 @app_audio.post(
@@ -21,7 +22,7 @@ MOCKED_RESPONSE = True
     status_code=200,
     tags=["Audio"],
     response_model=GenerateAudioResponse,
-    summary="Perform the application get a piece of audio given the modified prompt.",
+    summary="Perform the application generation of audio given the modified prompt.",
 )
 async def generate_audio(
     payload: GenerateAudioRequest, request: Request
@@ -34,6 +35,7 @@ async def generate_audio(
         improved = payload.prompt.strip().capitalize()
 
         if MOCKED_RESPONSE:
+            logger.info("Using MusicGen mock response")
             audio_base64 = generate_local_fake_audio(audio_id)
 
             return GenerateAudioResponse(
@@ -41,6 +43,8 @@ async def generate_audio(
                 improved_prompt=improved,
                 audio_base64=audio_base64,
             )
+
+        logger.info("Using MusicGen real response")
 
         # Generate the audio with the prompt
         audio_base64 = call_runpod_musicgen(improved)
