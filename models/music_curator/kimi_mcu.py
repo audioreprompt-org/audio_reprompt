@@ -5,7 +5,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key=os.getenv(
-        "MOONSHOT_API_KEY", "sk-4l1IqmtGvffTApzfYKlMvl22HDtDs0XOGaaxLg3G7Rk0bRLf"
+        "MOONSHOT_API_KEY"
     ),
     base_url="https://api.moonshot.ai/v1",
 )
