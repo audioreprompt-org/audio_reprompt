@@ -12,7 +12,7 @@ const props = defineProps({
     default: () => ({
       original_prompt: "Loading original prompt...",
       improved_prompt: "Loading refined prompt...",
-      audio_url: "#",
+      audio_base64: "",
     }),
   },
 });
@@ -43,20 +43,24 @@ const displayTime = (s) => {
 
 const audioSrc = ref("");
 
+const makeDataUrl = (b64) => {
+  return `data:audio/wav;base64,${b64}`;
+};
+
 onMounted(() => {
   /**
    * onMounted: Set the initial audio URL when the component loads.
    */
-  audioSrc.value = props.musicData.audio_url ?? "";
+  audioSrc.value = makeDataUrl(props.musicData.audio_base64);
 });
 
 watch(
   /**
-   * Watcher: Reset the audio player when the received audio URL changes.
+   * Watcher: Reset the audio player when the received audio base64 changes.
    */
-  () => props.musicData.audio_url,
-  (u) => {
-    audioSrc.value = u ?? "";
+  () => props.musicData.audio_base64,
+  (b64) => {
+    audioSrc.value = makeDataUrl(b64);
     if (audioPlayer.value) {
       isPlaying.value = false;
       audioPlayer.value.pause();
@@ -111,27 +115,36 @@ const onEnded = () => {
   isPlaying.value = false;
 };
 
+const base64ToBlob = (b64) => {
+  const byteCharacters = atob(b64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: "audio/wav" });
+};
+
 const handleDownload = async () => {
   /**
    * 5. Function to handle music file download.
    * Fetches the audio blob and triggers a local download in the browser.
    */
-  const url = props.musicData.audio_url;
-  if (!url || url === "#") return;
+  const b64 = props.musicData.audio_base64;
+  const blob = base64ToBlob(b64);
+  const url = URL.createObjectURL(blob);
   try {
-    const res = await fetch(url, { mode: "cors" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     // choose extension that matches your Content-Type (audio/wav, audio/mpeg, etc.)
     a.download = "generated_music.wav";
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(a.href);
   } catch (e) {
     console.error("Fallo la descarga:", e);
+  } finally {
+    URL.revokeObjectURL(url);
   }
 };
 
@@ -240,8 +253,8 @@ const goBackAndReset = () => {
 
       <div class="flex justify-center space-x-12 mt-8">
         <a
-          :href="musicData.audio_url"
-          @click="handleDownload"
+          href="#"
+          @click.prevent="handleDownload"
           class="py-4 px-8 text-xl font-bold rounded-full transition duration-300 transform hover:scale-[1.03] shadow-2xl inline-block"
           style="
             background: linear-gradient(135deg, #7e22ce 0%, #4f46e5 100%);
