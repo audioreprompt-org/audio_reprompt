@@ -10,13 +10,13 @@ from typing import Iterable, Sequence
 import numpy as np
 
 from config import setup_project_paths, load_config, PROJECT_ROOT
-from models.descriptors.spanio_captions import SpanioCaptionsEmbedding
 from psycopg import connect, sql
 from pydantic import BaseModel
 
 from models.food_prompts.encoder import (
     parse_food_crossmodal_items,
-    encode_food_crossmodal_items, encode_text,
+    encode_food_crossmodal_items,
+    encode_text,
 )
 from models.food_prompts.typedefs import FoodItemCrossModalEncoded
 from models.food_prompts.utils import chunks
@@ -397,13 +397,15 @@ def load_audio_descriptor_items() -> list[AudioDescriptorItem]:
 
     with open(file_path, "r") as f:
         dict_reader = DictReader(f)
-        descriptors = [row['text'] for row in dict_reader]
+        descriptors = [row["text"] for row in dict_reader]
 
-    embeddings_items: list[dict[str, str|list[float]]] = encode_text(descriptors)
+    embeddings_items: list[dict[str, str | list[float]]] = encode_text(descriptors)
 
     for item in embeddings_items:
         audio_caps_items.append(
-            AudioDescriptorItem(caption=item["prompt"], clap_embedding=item["text_embedding"])
+            AudioDescriptorItem(
+                caption=item["prompt"], clap_embedding=item["text_embedding"]
+            )
         )
 
     return audio_caps_items
@@ -433,27 +435,6 @@ def insert_audio_descriptor_items(audio_caps_items: list[AudioDescriptorItem]) -
         )
         return False
     return True
-
-
-def get_top_k_audio_captions(
-    caption_embedding: SpanioCaptionsEmbedding, k: int = 5
-) -> dict[str, float]:
-    with get_conn().cursor() as cursor:
-        cursor.execute(
-            """
-            select 
-                caption,
-                embedding <=> %(embedding)s::vector as sim
-            from audio_descriptors
-            order by embedding <=> %(embedding)s::vector
-            limit %(limit)s
-            """,
-            {"embedding": caption_embedding["embedding"], "limit": k},
-        )
-
-        results: dict[str, float] = {caption: sim for caption, sim in cursor.fetchall()}
-
-    return results
 
 
 def load_and_insert_crossmodal_food_embeddings():

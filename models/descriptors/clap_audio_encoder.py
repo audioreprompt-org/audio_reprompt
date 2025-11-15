@@ -10,12 +10,16 @@ from models.clap_score.model import ClapModel, SPECIALIZED_WEIGHTS_URL
 logger = logging.getLogger(__name__)
 
 
-def get_audio_embeddings(descriptor_dominance: dict[str, dict[str, float]], paths: Iterable[Path]):
+def get_audio_embeddings(
+    descriptor_dominance: dict[str, dict[str, float]], paths: Iterable[Path]
+):
     """
     Build normalized CLAP embeddings for each audio file in `paths`.
     `audio_id` is taken from the file stem (e.g., '99' for '.../99.mp3').
     """
-    model = ClapModel(device="auto", enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL)
+    model = ClapModel(
+        device="auto", enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL
+    )
     embeddings = []
 
     audio_embeddings = model.embed_audio([str(audio_path) for audio_path in paths])
@@ -26,7 +30,10 @@ def get_audio_embeddings(descriptor_dominance: dict[str, dict[str, float]], path
         embeddings.append(
             {
                 "id": audio_id,
-                "audio_embedding": F.normalize(audio_embeddings[i], p=2, dim=-1).squeeze(0).cpu().tolist(),
+                "audio_embedding": F.normalize(audio_embeddings[i], p=2, dim=-1)
+                .squeeze(0)
+                .cpu()
+                .tolist(),
                 "sweet_rate": float(rates["sweet_rate"]),
                 "bitter_rate": float(rates["bitter_rate"]),
                 "sour_rate": float(rates["sour_rate"]),
@@ -35,6 +42,23 @@ def get_audio_embeddings(descriptor_dominance: dict[str, dict[str, float]], path
         )
 
     return embeddings
+
+
+def get_only_audio_embeddings(
+    audio_filepaths: list[Path],
+) -> list[dict[str, str | list[float]]]:
+    model = ClapModel(
+        device="auto", enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL
+    )
+    embeddings = model.embed_audio([str(audio_path) for audio_path in audio_filepaths])
+
+    return [
+        {
+            "audio_id": pos + 1,
+            "embedding": F.normalize(embeddings[pos], p=2, dim=-1).squeeze(0).tolist(),
+        }
+        for pos, _ in enumerate(embeddings)
+    ]
 
 
 def _load_guedes_descriptor_dominance(

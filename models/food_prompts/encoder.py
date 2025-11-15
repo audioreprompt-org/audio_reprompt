@@ -2,16 +2,12 @@ import csv
 from itertools import chain
 
 import pandas as pd
-from sentence_transformers import SentenceTransformer
 
 from config import setup_project_paths, load_config, PROJECT_ROOT
+from models.allmini_v2.encoder import encode_text
 from models.descriptors.clap_prompt_encoder import get_text_embeddings_in_batches
 from models.food_prompts.parser import map_to_fooditem_crossmodal
 from models.food_prompts.typedefs import FoodItemCrossModal, FoodItemCrossModalEncoded
-
-
-# no ideal but
-model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 
 def parse_food_crossmodal_items(fpath: str) -> list[FoodItemCrossModal]:
@@ -28,20 +24,13 @@ def parse_food_crossmodal_items(fpath: str) -> list[FoodItemCrossModal]:
 def encode_food_crossmodal_items(
     items: list[FoodItemCrossModal],
 ) -> list[FoodItemCrossModalEncoded]:
-    embs = model.encode([f"{item['food_item']} {item['descriptor']}" for item in items])
+    embs = encode_text([f"{item['food_item']} {item['descriptor']}" for item in items])
 
     encoded_items = []
     for emb, item in zip(embs, items):
-        encoded_items.append(item | {"text_embedding": emb.tolist()})
+        encoded_items.append(item | {"text_embedding": emb})
 
     return encoded_items
-
-
-def encode_text(items: list[str]) -> list[dict[str, str|list[float]]]:
-    return [
-        {"prompt": text, "text_embedding": emb.tolist()}
-        for text, emb in zip(items, model.encode(items))
-    ]
 
 
 def data_examples_crossmodal()-> None:
