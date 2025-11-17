@@ -1,14 +1,12 @@
 import re
 
-import pandas as pd
-
 from models.allmini_v2.encoder import encode_text
 from models.descriptors.rag import (
     get_top_k_food_descriptors,
     get_top_k_audio_captions,
     CrossModalRAGResult,
 )
-from models.music_curator.kimi_mcu import mcu_reprompt
+from models.music_curator.kimi_mcu import mcu_reprompt, KIMI_K2_THINKING_MODEL
 
 
 def custom_single_sentence(crossmodal_descriptors: list[CrossModalRAGResult]) -> str:
@@ -38,7 +36,7 @@ def format_crossmodal_descriptors(
     return crossmodal_results
 
 
-def transform(user_prompt: str):
+def transform(user_prompt: str, model: str = KIMI_K2_THINKING_MODEL):
     # 1. encode user prompt without preprocessing
     if not (
         emb_user := next(
@@ -82,18 +80,6 @@ def transform(user_prompt: str):
         format_crossmodal_descriptors(crossmodal_descriptors)
     )
 
-    return mcu_reprompt(music_descriptor_values, formatted_crossmodal_values)
-
-
-if __name__ == "__main__":
-    prompts = [
-        "I feel energetic and I'm gonna drink an iced Americano along with my trainer Valentina. The café is lively and the music is upbeat.",
-        "I'm at the bakery and I'm gonna eat a chocolate croissant. It smells buttery and the display case gleams.",
-        "We're at the stadium and we're gonna eat a chili cheese hot dog. The air feels hot and the lights are glaring.",
-        "I feel stressed and I'm gonna eat a quinoa bowl along with my trainer Luis. The gym café is bright and the music is low.",
-    ]
-    results = []
-    for prompt in prompts:
-        results.append({"prompt": prompt, "reprompt": transform(prompt)})
-
-    pd.DataFrame(results).to_csv("pipeline_results_two_sen.csv", index=False)
+    return mcu_reprompt(
+        music_descriptor_values, formatted_crossmodal_values, model=model
+    )
