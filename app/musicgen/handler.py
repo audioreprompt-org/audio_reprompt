@@ -7,13 +7,12 @@ import torch
 from models.musicgen.model import load_musicgen_pipeline
 from models.musicgen.audio_generator import generate_audio_base64_from_prompt
 
-DEFAULT_MODEL_PATH = os.getenv(
-    "MODEL_DIR"
-)
+DEFAULT_MODEL_PATH = os.getenv("MODEL_DIR")
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 _pipe = None
+
 
 def _get_pipeline():
     """
@@ -58,7 +57,11 @@ def handler(event):
             return {"error": str(e)}
 
     inp = (event.get("input") or {}) or {}
-    prompt = (inp.get("prompt") or "warm lo-fi beats with vinyl crackle").strip()
+
+    prompt = inp.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("Campo 'prompt' es obligatorio y debe ser un string no vacío.")
+    prompt = prompt.strip()
 
     try:
         pipe = _get_pipeline()
@@ -76,6 +79,7 @@ def handler(event):
         }
     except Exception as e:
         return {"error": f"Fallo en generación de audio: {e}"}
+
 
 if __name__ == "__main__":
     runpod.serverless.start({"handler": handler})
