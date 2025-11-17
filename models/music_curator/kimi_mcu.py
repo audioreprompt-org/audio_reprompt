@@ -2,7 +2,7 @@ import os
 
 from openai import OpenAI
 
-from models.music_curator.prompts import MUSIC_REPROMPT_PROMPT_V3
+from models.music_curator.prompts import MCU_PROMPTS
 
 KIMI_K2_THINKING_MODEL = "kimi-k2-thinking"
 OPENAI_GPT_5_NANO_MODEL = "gpt-5-nano"
@@ -28,12 +28,13 @@ def mcu_reprompt(
     crossmodal_descriptors: str,
     music_captions: str,
     model: str = KIMI_K2_THINKING_MODEL,
+    prompt_version: str = "V3",
 ) -> str:
     messages = [
         {"role": "system", "content": MUSIC_CURATOR_ROLE},
         {
             "role": "user",
-            "content": MUSIC_REPROMPT_PROMPT_V3.format(
+            "content": MCU_PROMPTS[prompt_version].format(
                 crossmodal_descriptors=crossmodal_descriptors,
                 music_captions=music_captions,
             ),

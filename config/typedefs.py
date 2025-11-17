@@ -16,6 +16,7 @@ class DataConfig:
     data_prompts_path: str
     data_clap_path: str
     embeddings_csv_path: str
+    reprompts_csv_path: str
     batch_size: int
     max_audio_length: int
     sample_rate: int

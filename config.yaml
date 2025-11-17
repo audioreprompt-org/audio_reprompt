@@ -12,6 +12,7 @@ data:
   tracks_base_data_path: "data/tracks/generated_base_music"
   data_clap_path: "data/scores"
   embeddings_csv_path: "data/embeddings"
+  reprompts_csv_path: "data/reprompt"
   batch_size: 32
   max_audio_length: 30 # seconds
   sample_rate: 32000
