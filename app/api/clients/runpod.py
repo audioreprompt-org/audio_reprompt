@@ -67,7 +67,7 @@ def call_runpod_musicgen(
     #       "audio_base64": "UklGRjJwOgBXQVZFZm10..."
     #   }
     # }
-    output = data.get("output")
+    output = data.get("output", {})
     if not output or "audio_base64" not in output:
         raise RunpodError(f"Unexpected response format: {data}")
 
