@@ -1,12 +1,12 @@
 from typing import Annotated
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, HttpUrl, UUID4
+from pydantic import BaseModel, Field, UUID4
 
 
 class GenerateAudioRequest(BaseModel):
     """Client sends only a prompt."""
-    prompt: Annotated[str, Field(min_length=1, max_length=800)]
+    prompt: Annotated[str, Field(min_length=16, max_length=800)]
 
 
 class GenerateAudioResponse(BaseModel):
