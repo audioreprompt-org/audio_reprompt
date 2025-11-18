@@ -1,5 +1,9 @@
+import base64
 import logging
 import os
+import io
+from scipy.io.wavfile import write as wav_write
+
 import scipy.io.wavfile
 from tqdm import tqdm
 
@@ -45,3 +49,23 @@ def generate_audio_from_prompts(
 
     print(f"{len(results)} archivos de audio generados en: {output_dir}")
     return results
+
+
+
+def generate_audio_base64_from_prompt(text_prompt, synthesiser) -> str:
+    # 1. Ejecutar el modelo con el prompt de texto
+    output = synthesiser(text_prompt, forward_params={"do_sample": True})
+
+    # 2. Extraer los datos de audio y la frecuencia de muestreo
+    audio_data = output["audio"]            # np.ndarray con las muestras de audio
+    sr = output.get("sampling_rate")        # Frecuencia de muestreo (int)
+
+    # 3. Escribir el WAV en un buffer en memoria (BytesIO)
+    buf = io.BytesIO()
+    wav_write(buf, sr, audio_data)
+    buf.seek(0)
+
+    # 4. Convertir el contenido del buffer a base64
+    audio_bytes = buf.read()
+    audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+    return audio_b64

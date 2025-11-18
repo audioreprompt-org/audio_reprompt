@@ -79,6 +79,11 @@ class EnvironmentConfig:
     device: str
     num_workers: int
     pin_memory: bool
+    bucket_name: str
+    aws_region: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_session_token: str | None = None
 
 
 @dataclass
