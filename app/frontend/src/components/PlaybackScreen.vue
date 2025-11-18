@@ -161,7 +161,7 @@ const goBackAndReset = () => {
 
 <template>
   <div
-    class="min-h-screen flex flex-col items-center justify-between p-6 bg-dark-bg text-white relative overflow-hidden"
+    class="flex flex-col items-center p-6 bg-dark-bg text-white relative overflow-hidden"
   >
     <div
       class="absolute inset-0 z-0"
@@ -182,29 +182,29 @@ const goBackAndReset = () => {
     ></div>
 
     <div
-      class="relative z-10 max-w-4xl w-full text-center mt-24 flex flex-col items-center space-y-16"
+      class="relative z-10 max-w-4xl w-full text-center mt-10 flex flex-col items-center space-y-12 min-h-screen"
     >
       <h1
-        class="text-4xl font-extrabold tracking-tight mb-8 text-white [text-shadow:_0_0_4px_rgba(168,85,247,0.35),_0_0_8px_rgba(168,85,247,0.25)]"
+        class="text-3xl font-extrabold tracking-tight mb-6 text-white [text-shadow:_0_0_4px_rgba(168,85,247,0.35),_0_0_8px_rgba(168,85,247,0.25)]"
       >
         Our system has associated you with this piece of music
       </h1>
 
-      <div class="w-full flex justify-between space-x-4 px-4 mb-8">
+      <div class="w-full flex justify-between space-x-4 px-3 mb-8">
         <div
-          class="w-[47%] p-4 bg-black/40 rounded-lg shadow-md border border-white/20 text-left cursor-pointer transition duration-300 transform hover:scale-[1.09]"
+          class="w-[47%] p-4 bg-black/40 rounded-lg shadow-md border border-white/20 text-left cursor-pointer transition duration-300 transform hover:scale-[1.07]"
         >
-          <h3 class="text-sm font-bold text-gray-200 mb-1">ORIGINAL PROMPT:</h3>
-          <p class="text-xs text-white">
+          <h3 class="text-xs font-bold text-gray-200 mb-1">ORIGINAL PROMPT:</h3>
+          <p class="text-base text-white text-justify">
             {{ props.musicData.original_prompt }}
           </p>
         </div>
 
         <div
-          class="w-[47%] p-4 bg-black/40 rounded-lg shadow-md border border-white/20 text-left cursor-pointer transition duration-300 transform hover:scale-[1.09]"
+          class="w-[47%] p-4 bg-black/40 rounded-lg shadow-md border border-white/20 text-left cursor-pointer transition duration-300 transform hover:scale-[1.07]"
         >
-          <h3 class="text-sm font-bold text-gray-200 mb-1">REFINED PROMPT:</h3>
-          <p class="text-xs text-white">
+          <h3 class="text-xs font-bold text-gray-200 mb-1">REFINED PROMPT:</h3>
+          <p class="text-base text-white text-justify">
             {{ props.musicData.improved_prompt }}
           </p>
         </div>
@@ -223,11 +223,11 @@ const goBackAndReset = () => {
       <div class="flex items-center w-full space-x-4 px-8">
         <button
           @click="togglePlay"
-          class="w-16 h-16 rounded-full flex items-center justify-center p-3 shadow-2xl transition duration-300"
+          class="w-14 h-14 rounded-full flex items-center justify-center p-3 shadow-2xl transition duration-300"
           style="background: linear-gradient(135deg, #7e22ce 0%, #4f46e5 100%)"
         >
           <svg
-            class="w-8 h-8 text-white"
+            class="w-6 h-6 text-white"
             viewBox="0 0 24 24"
             fill="currentColor"
           >
@@ -245,34 +245,34 @@ const goBackAndReset = () => {
             @input="onSeek"
             class="w-full h-2 rounded-lg appearance-none cursor-pointer"
           />
-          <span class="text-sm text-purple-300 whitespace-nowrap">
+          <span class="text-xs text-purple-300 whitespace-nowrap">
             {{ displayTime(current) }} / {{ displayTime(duration) }}
           </span>
         </div>
       </div>
 
-      <div class="flex justify-center space-x-12 mt-8">
+      <div class="flex justify-center space-x-8 mt-8">
         <a
           href="#"
           @click.prevent="handleDownload"
-          class="py-4 px-8 text-xl font-bold rounded-full transition duration-300 transform hover:scale-[1.03] shadow-2xl inline-block"
+          class="py-3 px-6 text-xl font-bold rounded-full transition duration-300 transform hover:scale-[1.03] shadow-2xl inline-block"
           style="
             background: linear-gradient(135deg, #7e22ce 0%, #4f46e5 100%);
             text-decoration: none;
           "
         >
-          DOWNLOAD MUSIC
+          Download Music
         </a>
 
         <button
           @click="goBackAndReset"
-          class="py-4 px-8 text-xl font-bold rounded-full transition duration-300 transform hover:scale-[1.03] shadow-2xl"
+          class="py-3 px-6 text-xl font-bold rounded-full transition duration-300 transform hover:scale-[1.03] shadow-2xl"
           style="
             background: linear-gradient(135deg, #4f46e5 0%, #7e22ce 100%);
             text-decoration: none;
           "
         >
-          NEW PROMPT
+          New Prompt
         </button>
       </div>
     </div>
@@ -292,15 +292,15 @@ const goBackAndReset = () => {
       </div>
 
       <div class="mt-6">
-        <p class="text-purple-300 font-medium mb-2">Developers:</p>
+        <p class="text-purple-300 font-medium mb-2">Authors:</p>
         <div
           class="flex flex-nowrap justify-center gap-x-8 text-purple-400 whitespace-nowrap px-4"
         >
           <span>Jose Daniel Garcia Davila</span>
           <span>Juana Valentina Mendoza Santamaría</span>
           <span>Valentina Nariño Chicaguy</span>
-          <span>Jorge Luis Sarmiento Herrera</span>
           <span>Mario Fernando Reyes Ojeda</span>
+          <span>Jorge Luis Sarmiento Herrera</span>
         </div>
       </div>
     </div>

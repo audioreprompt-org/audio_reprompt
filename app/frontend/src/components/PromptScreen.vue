@@ -1,5 +1,10 @@
 <script setup>
 import { ref, onUnmounted } from "vue";
+import { franc } from "franc";
+import {
+  expandContractions,
+  LANGUAGE_MAP,
+} from "../composables/contractions.js";
 
 // Define event emitter for parent communication (App.vue listens to "generate").
 const emit = defineEmits(["generate"]);
@@ -8,9 +13,11 @@ const DEFAULT_PROMPT =
   "E.g. I'm at the food court and I'm gonna eat a bowl of ramen. The space is noisy and the neon signs are bright.";
 
 // Validation thresholds.
-const MIN_LENGTH = 20; // Minimum number of characters.
 const MAX_LENGTH = 500; // Maximum number of characters.
-const MIN_WORDS = 3; // Minimum number of words (for descriptive prompts).
+const MIN_WORDS = 12; // Minimum number of words (for descriptive prompts).
+const MAX_WORDS = 64; // Maximum number of words (for descriptive prompts).
+
+const TARGET_LANGUAGE_CODE = "eng";
 
 // Validation toggles.
 const isCharacterLengthEnabled = ref(true); // Enables/disables strict length validation.
@@ -31,6 +38,7 @@ const DANGER_PATTERNS = [
   /DROP\s/i, // SQL injection keyword.
   /DELETE\s/i, // SQL injection keyword.
   /;/, // Semicolons chaining shell/SQL commands.
+  /(?:https?:\/\/|www\.)[^\s]+/i, // Detect common URL prefixes (case-insensitive)
 ];
 
 // Rotating loading messages to simulate creative generation progress.
@@ -107,7 +115,6 @@ const props = defineProps({
 const checkLanguage = (prompt) => {
   /**
    * Checks if the prompt is mostly English (simple Latin characters only).
-   * This is a lightweight client-side heuristic.
    * @param {string} prompt - User input to validate.
    * @returns {boolean} - True if the text is acceptable, false otherwise.
    */
@@ -115,14 +122,32 @@ const checkLanguage = (prompt) => {
     return true;
   }
 
-  const latinRegex = /^[a-z0-9\s.,?!'":;@#-]+$/i;
+  let trimmedPrompt = prompt.trim();
+  trimmedPrompt = expandContractions(trimmedPrompt);
 
-  if (!latinRegex.test(prompt)) {
+  try {
+    // Usa 'nlp' para procesar el texto y normalizarlo (esto expande algunas contracciones)
+    const detectedLanguage = franc(trimmedPrompt, {
+      minLength: 3,
+    });
+
+    const detectedName = LANGUAGE_MAP[detectedLanguage] || detectedLanguage;
+
+    if (
+      detectedLanguage !== TARGET_LANGUAGE_CODE &&
+      detectedLanguage !== "und"
+    ) {
+      errorMessage.value = `Language Warning: The system detected ${detectedName} instead of English. Please write your prompt in English for optimal results.`;
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Franc detection failed:", error);
     errorMessage.value =
-      "Language Warning: Please ensure your prompt is in English (Latin alphabet only) for optimal results.";
+      "Language check system error. Please try again or use English only.";
     return false;
   }
-  return true;
 };
 
 const sanitizePrompt = (prompt) => {
@@ -156,22 +181,35 @@ const validatePrompt = (prompt) => {
     return true; // Validación desactivada.
   }
 
+  let failureReasons = [];
   const charCount = prompt.length;
   const wordCount = prompt
     .split(/\s+/)
     .filter((word) => word.length > 0).length;
 
-  // Check for overly long prompts.
-  if (charCount > MAX_LENGTH) {
-    errorMessage.value = `Prompt is too long (${charCount} characters). Maximum allowed is ${MAX_LENGTH} characters.`;
-    return false;
+  // 1. Verificación Mínima de Palabras (Requerido: 12)
+  if (wordCount < MIN_WORDS) {
+    failureReasons.push(
+      `The prompt is too short. Minimum required: ${MIN_WORDS} words (current: ${wordCount}).`
+    );
   }
 
-  // Check for minimal descriptive input.
-  const passesMinimum = charCount >= MIN_LENGTH || wordCount >= MIN_WORDS;
+  // 2. Verificación Máxima de Palabras (Requerido: 64)
+  if (wordCount > MAX_WORDS) {
+    failureReasons.push(
+      `The prompt exceeds the maximum word limit. Maximum allowed: ${MAX_WORDS} words (current: ${wordCount}).`
+    );
+  }
 
-  if (!passesMinimum) {
-    errorMessage.value = `Prompt is too short. Please provide at least ${MIN_LENGTH} characters or ${MIN_WORDS} descriptive words.`;
+  // 3. Verificación Máxima de Caracteres (Requerido: 500)
+  if (charCount > MAX_LENGTH) {
+    failureReasons.push(
+      `The prompt exceeds the maximum character limit. Maximum allowed: ${MAX_LENGTH} characters (current: ${charCount}).`
+    );
+  }
+
+  if (failureReasons.length > 0) {
+    errorMessage.value = failureReasons.join("\n");
     return false;
   }
 
@@ -200,14 +238,14 @@ const submitPrompt = () => {
     return;
   }
 
-  // 3. Language validation.
-  if (!checkLanguage(userPrompt)) {
+  // 3. Length/content validation.
+  if (!validatePrompt(userPrompt)) {
     showError.value = true;
     return;
   }
 
-  // 4. Length/content validation.
-  if (!validatePrompt(userPrompt)) {
+  // 4. Language validation.
+  if (!checkLanguage(userPrompt)) {
     showError.value = true;
     return;
   }
@@ -243,7 +281,7 @@ const resetPrompt = () => {
 
 <template>
   <div
-    class="min-h-screen flex flex-col items-center justify-center p-6 bg-dark-bg text-white relative overflow-hidden"
+    class="flex flex-col items-center justify-center p-6 bg-dark-bg text-white relative overflow-hidden"
   >
     <div
       class="absolute inset-0 z-0"
@@ -263,9 +301,11 @@ const resetPrompt = () => {
       "
     ></div>
 
-    <div class="relative z-10 max-w-4xl w-full text-center mt-10 space-y-16">
+    <div
+      class="relative z-10 max-w-4xl w-full text-center mt-10 mb-12 pb-16 space-y-16"
+    >
       <h1
-        class="text-4xl font-extrabold tracking-tight mb-20 text-white [text-shadow:_0_0_4px_rgba(168,85,247,0.35),_0_0_8px_rgba(168,85,247,0.25)]"
+        class="text-3xl font-extrabold tracking-tight mt-2 mb-20 text-white [text-shadow:_0_0_4px_rgba(168,85,247,0.35),_0_0_8px_rgba(168,85,247,0.25)]"
       >
         Imagine a piece of music to accompany your meal
       </h1>
@@ -303,17 +343,17 @@ const resetPrompt = () => {
         ></textarea>
       </form>
 
-      <p v-if="showError" class="text-red-400 text-sm mt-2">
+      <p v-if="showError" class="text-red-400 text-sm mt-2 whitespace-pre-line">
         {{ errorMessage }}
       </p>
 
       <button
         @click="submitPrompt"
         :disabled="props.isLoading || showError"
-        class="py-4 px-12 text-xl font-bold rounded-full transition duration-300 transform hover:scale-[1.03] shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed"
+        class="py-3 px-8 text-xl font-bold rounded-full transition duration-300 transform hover:scale-[1.03] shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed"
         style="background: linear-gradient(135deg, #7e22ce 0%, #4f46e5 100%)"
       >
-        {{ props.isLoading ? "GENERATING..." : "GENERATE MUSIC" }}
+        {{ props.isLoading ? "Generating..." : "Generate Music" }}
       </button>
 
       <div
@@ -423,4 +463,32 @@ const resetPrompt = () => {
       </div>
     </div>
   </div>
+  <footer
+    class="w-full relative z-10 py-8 bg-black backdrop-blur-sm border-t border-purple-500/20"
+  >
+    <div class="max-w-4xl mx-auto text-center px-6 text-sm text-purple-400">
+      <div class="space-y-2">
+        <p class="font-semibold text-purple-300">
+          &copy; 2025 Audio Reprompting Project
+        </p>
+        <p class="text-purple-400">Universidad de Los Andes</p>
+        <p class="text-purple-400">
+          Master's Degree in Artificial Intelligence
+        </p>
+      </div>
+
+      <div class="mt-6">
+        <p class="text-purple-300 font-medium mb-2">Authors:</p>
+        <div
+          class="flex flex-nowrap justify-center gap-x-8 text-purple-400 whitespace-nowrap px-4"
+        >
+          <span>Jose Daniel Garcia Davila</span>
+          <span>Juana Valentina Mendoza Santamaría</span>
+          <span>Valentina Nariño Chicaguy</span>
+          <span>Mario Fernando Reyes Ojeda</span>
+          <span>Jorge Luis Sarmiento Herrera</span>
+        </div>
+      </div>
+    </div>
+  </footer>
 </template>
