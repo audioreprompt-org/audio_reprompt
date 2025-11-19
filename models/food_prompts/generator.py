@@ -30,33 +30,13 @@ Survey on associations between sensations, emotions, and tastes of `{}`. Answer 
 2. Human responses - top 3 physiological effects
 3. Temperature - choose only one: hot, warm, cold, iced
 4. Texture - top 3 texture terms
-5. Emotions - choose only one: anger, disgust, fear, happiness, sadness, surprise
+5. Emotions - choose only one: anger, disgust, fear, happiness, nostalgic, surprise
 6. Color - choose only one: blue, purple, green, brown, red, orange, yellow, white
 7. Taste - choose only one of: sweet, bitter, salty, sour
 
-Respond with single terms, comma-separated, formatted as:
-`Chemical flavor profile`|`Human responses`|`Temperature`|`Texture`|`Emotions`|`Color`|`Taste`
+Respond with single terms, comma-separated, no header, formatted as:
+chemical flavor profile|human responses|temperature|texture|emotions|color|taste
 In case the `food_item` is not a food returns only `No Label`. If a dimension cannot be answered, fill the dimension as `No Label`
-"""
-
-
-PROMPT_V2 = """
-For {}, return exactly one line: f1|f2|f3|f4|f5|f6|f7.
-No headers, labels, explanations, quotes, or backticks.
-English, lowercase. Single words only.
-If not a food or drink: No Label. If a field is unknown: No Label. 
-Use "|" with no spaces; in f1,f2,f4 list exactly 3 distinct terms separated by ", ".
-Don’t guess; no off-list choices; no cultural/brand/health inferences.
-
-Fields:
-1 chemical flavor profile (3 sensory terms)
-2 human responses (3 physiological effects)
-3 temperature: [hot, warm, cold, iced]
-4 texture (3 tactile terms)
-5 emotion: [anger, disgust, fear, happiness, sadness, surprise]
-6 color: [blue, purple, green, brown, red, orange, yellow, white]
-7 taste: [sweet, bitter, salty, sour]
-
 """
 
 
@@ -143,10 +123,10 @@ def collect_batches_food_results(file_input: str, output_dir: str) -> None:
 def read_food_csv_items(file: str, column_name: str, do_sample: bool = False, n_sample: int = 100) -> set[str]:
     with open(file, 'r') as file_:
         reader = DictReader(file_)
-        items = {row[column_name] for row in reader}
+        items = {row[column_name].lower() for row in reader}
 
     filtered = list(filter(lambda item: 'raw' not in item, items))
-    return random.sample(filtered, min(n_sample, len(filtered))) if do_sample else items
+    return random.sample(filtered, min(n_sample, len(filtered))) if do_sample else filtered
 
 
 if __name__ == '__main__':
@@ -161,8 +141,6 @@ if __name__ == '__main__':
     food_items = read_food_csv_items(
         f"{FOOD_VOCAB_PATH}/food_nutrition_vocabulary.csv",
         "food",
-        True,
-        100
     )
 
     option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
@@ -172,7 +150,7 @@ if __name__ == '__main__':
     match option:
         case BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE:
             for sample_part in chunks(food_items, BATCH_SIZE):
-                put_batch_get_food_captions(sample_part, MODEL_GTP_40_MINI, PROMPT_V2)
+                put_batch_get_food_captions(sample_part, MODEL_GTP_40_MINI, PROMPT_V1)
 
         case BatchOptionEnum.OPTION_COLLECT_BATCHES:
             for batch_file in glob.glob('batch_requests_*.csv'):

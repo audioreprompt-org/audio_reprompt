@@ -24,6 +24,8 @@ dependencies = [
     "matplotlib>=3.10.7",
     "seaborn>=0.13.2",
     "sentence-transformers>=5.1.2",
+    "pandoc>=2.4",
+    "nbconvert>=7.16.6",
 ]
 
 [build-system]
