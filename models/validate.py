@@ -5,7 +5,10 @@ from tqdm import tqdm
 import pandas as pd
 
 from models.clap_score import CLAPItem, ClapModel
-from models.music_curator.kimi_mcu import KIMI_K2_THINKING_MODEL, OPENAI_GPT_5_NANO_MODEL
+from models.music_curator.kimi_mcu import (
+    KIMI_K2_THINKING_MODEL,
+    OPENAI_GPT_5_NANO_MODEL,
+)
 from models.pipeline import transform
 
 setup_project_paths()
@@ -36,7 +39,9 @@ def generate_reprompts(model: str, prompt_version: str, limit: int = 100_000):
             {
                 "id_prompt": pos,
                 "prompt": user_prompt,
-                "reprompt": transform(user_prompt, model=model, prompt_version=prompt_version),
+                "reprompt": transform(
+                    user_prompt, model=model, prompt_version=prompt_version
+                ),
             }
         )
 
@@ -45,15 +50,26 @@ def generate_reprompts(model: str, prompt_version: str, limit: int = 100_000):
         index=False,
     )
 
-def calculate_clap_score_alignment(result_filepath: str, using_raw_prompts: bool = False, optional_suffix: str = ""):
+
+def calculate_clap_score_alignment(
+    result_filepath: str,
+    using_raw_prompts: bool = False,
+    optional_suffix: str = "",
+    cross_evaluation: bool = False,
+) -> None:
     if using_raw_prompts:
         print("calculando scores de clap para prompts de entrada...")
-        field = 'prompt'
-        relative_audio_path = AUDIOS_PATH / 'raw_prompts_audios'
+        field = "prompt"
+        relative_audio_path = AUDIOS_PATH / "raw_prompts_audios"
+    elif cross_evaluation:
+        print("calculando scores de clap usando prompt original - reprompt audio...")
+        field = "prompt"
+        relative_audio_path = AUDIOS_PATH / "reprompt_audios"
     else:
         print("calculando scores de clap para reprompts generados...")
-        field = 'reprompt'
-        relative_audio_path = AUDIOS_PATH / 'reprompt_audios'
+        field = "reprompt"
+        relative_audio_path = AUDIOS_PATH / "reprompt_audios"
+        optional_suffix = "cross_evaluation"
 
     with open(result_filepath, "r") as file_:
         reader = csv.DictReader(file_)
@@ -61,37 +77,47 @@ def calculate_clap_score_alignment(result_filepath: str, using_raw_prompts: bool
 
     clap_items = [
         CLAPItem(
-            id=row['id_prompt'],
+            id=row["id_prompt"],
             prompt=row[field],
-            audio_path=str(relative_audio_path / f"{row['id_prompt']}.wav")
+            audio_path=str(relative_audio_path / f"{row['id_prompt']}.wav"),
         )
         for row in items
     ]
 
     results = clap_model.calculate_scores(clap_items)
 
-    pd.DataFrame([
-        {
-            "id_prompt": res.item.id,
-            "text": res.item.prompt,
-            "audio": res.item.audio_path,
-            "clap_score": res.clap_score,
-         }
-        for res in results
+    pd.DataFrame(
+        [
+            {
+                "id_prompt": res.item.id,
+                "text": res.item.prompt,
+                "audio": res.item.audio_path,
+                "clap_score": res.clap_score,
+            }
+            for res in results
         ]
-    ).to_csv(f"{CLAP_RESULTS_PATH}/clap_score_results_{field}_outputs_{optional_suffix}.csv", index=False)
+    ).to_csv(
+        f"{CLAP_RESULTS_PATH}/clap_score_results_{field}_outputs_{optional_suffix}.csv",
+        index=False,
+    )
 
 
 def calculate_clap_score_reprompts() -> None:
-    calculate_clap_score_alignment(
-        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
-    )
+    # calculate_clap_score_alignment(
+    #     f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
+    # )
+    #
+    # calculate_clap_score_alignment(
+    #     f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
+    #     using_raw_prompts=True
+    # )
 
     calculate_clap_score_alignment(
         f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
-        using_raw_prompts=True
+        cross_evaluation=True,
     )
+
 
 if __name__ == "__main__":
-    generate_reprompts(OPENAI_GPT_5_NANO_MODEL, "V4")
-    # calculate_clap_score_reprompts()
+    # generate_reprompts(OPENAI_GPT_5_NANO_MODEL, "V4")
+    calculate_clap_score_reprompts()
