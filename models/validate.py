@@ -65,11 +65,11 @@ def calculate_clap_score_alignment(
         print("calculando scores de clap usando prompt original - reprompt audio...")
         field = "prompt"
         relative_audio_path = AUDIOS_PATH / "reprompt_audios"
+        optional_suffix = "cross_evaluation"
     else:
         print("calculando scores de clap para reprompts generados...")
         field = "reprompt"
         relative_audio_path = AUDIOS_PATH / "reprompt_audios"
-        optional_suffix = "cross_evaluation"
 
     with open(result_filepath, "r") as file_:
         reader = csv.DictReader(file_)
@@ -85,7 +85,6 @@ def calculate_clap_score_alignment(
     ]
 
     results = clap_model.calculate_scores(clap_items)
-
     pd.DataFrame(
         [
             {
@@ -103,14 +102,14 @@ def calculate_clap_score_alignment(
 
 
 def calculate_clap_score_reprompts() -> None:
-    # calculate_clap_score_alignment(
-    #     f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
-    # )
-    #
-    # calculate_clap_score_alignment(
-    #     f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
-    #     using_raw_prompts=True
-    # )
+    calculate_clap_score_alignment(
+        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
+    )
+
+    calculate_clap_score_alignment(
+        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
+        using_raw_prompts=True
+    )
 
     calculate_clap_score_alignment(
         f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",

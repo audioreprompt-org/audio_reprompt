@@ -28,7 +28,7 @@ def encode_food_crossmodal_items(
 
     encoded_items = []
     for emb, item in zip(embs, items):
-        encoded_items.append(item | {"text_embedding": emb})
+        encoded_items.append(item | {"text_embedding": emb["text_embedding"]})
 
     return encoded_items
 

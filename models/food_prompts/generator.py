@@ -51,7 +51,7 @@ def create_prompt(prompt_version, food_item: str) -> str:
 
 
 def put_batch_get_food_captions(
-    food_items: list[str], model_version: str, prompt_version: str
+    food_items: list[str], model_version: str, prompt_version: str, output_dir: str
 ) -> None:
     logger.info("putting batch using model: %s", model_version)
 
@@ -83,16 +83,16 @@ def put_batch_get_food_captions(
             retries += 1
 
     if batch_requests:
-        save_batch_requests(batch_requests)
+        save_batch_requests(batch_requests, output_dir)
         logger.info("completed batch in queue")
 
 
-def save_batch_requests(batch_requests: list[dict[str, str]]) -> None:
+def save_batch_requests(batch_requests: list[dict[str, str]], output_dir) -> None:
     part_id = (
         f"{datetime.datetime.now(tz=datetime.UTC).strftime('%Y%M%d')}"
         f"_{str(uuid.uuid4())[:7].lower()}"
     )
-    filename = f"batch_requests_part_{part_id}.csv"
+    filename = f"{output_dir}/batch_requests_part_{part_id}.csv"
 
     pd.DataFrame(batch_requests).to_csv(filename, mode="w+", index=False)
 
@@ -135,6 +135,8 @@ if __name__ == '__main__':
 
     FOOD_VOCAB_PATH = PROJECT_ROOT / config.data.cleaned_data_path / "food"
     FOOD_PROMPTS_PATH = PROJECT_ROOT / config.data.cleaned_data_path / "food_prompts"
+    FOOD_PROMPTS_REQUESTS_PATH = FOOD_PROMPTS_PATH / "requests"
+    FOOD_PROMPTS_RESPONSES_PATH = FOOD_PROMPTS_PATH / "results"
 
     FOOD_PROMPTS_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -143,19 +145,24 @@ if __name__ == '__main__':
         "food",
     )
 
-    option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
+    # option = BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE
     # option = BatchOptionEnum.OPTION_COLLECT_BATCHES
-    # option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
+    option = BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS
 
     match option:
         case BatchOptionEnum.OPTION_PUT_BATCHES_ON_QUEUE:
             for sample_part in chunks(food_items, BATCH_SIZE):
-                put_batch_get_food_captions(sample_part, MODEL_GTP_40_MINI, PROMPT_V1)
+                put_batch_get_food_captions(
+                    sample_part,
+                    MODEL_GTP_40_MINI,
+                    PROMPT_V1,
+                    str(FOOD_PROMPTS_REQUESTS_PATH)
+                )
 
         case BatchOptionEnum.OPTION_COLLECT_BATCHES:
-            for batch_file in glob.glob('batch_requests_*.csv'):
+            for batch_file in glob.glob(f'{FOOD_PROMPTS_REQUESTS_PATH}/batch_requests_*.csv'):
                 collect_batch_results(batch_file)
 
         case BatchOptionEnum.OPTION_COLLECT_BATH_RESULTS:
-            for batch_file in glob.glob('batch_requests_*.csv'):
-                collect_batches_food_results(batch_file, FOOD_PROMPTS_PATH)
+            for batch_file in glob.glob(f'{FOOD_PROMPTS_REQUESTS_PATH}/batch_requests_*.csv'):
+                collect_batches_food_results(batch_file, FOOD_PROMPTS_RESPONSES_PATH)

@@ -448,20 +448,10 @@ def load_and_insert_crossmodal_food_embeddings():
             insert_crossmodal_food_embeddings(encode_food_crossmodal_items(chunk))
 
 
-# def test():
-#     create_audio_descriptors_table()
-#     insert_audio_descriptors(
-#         [
-#             AudioDescriptorItem(caption="caption2", clap_embedding=[1.0] * 512),
-#             AudioDescriptorItem(caption="caption3", clap_embedding=[3.0] * 512),
-#             AudioDescriptorItem(caption="caption4", clap_embedding=[2.0] * 512),
-#         ]
-#     )
-
 
 if __name__ == "__main__":
     # set manual option
-    option = ExecutionOption.INSERT_AUDIO_DESCRIPTORS
+    option = ExecutionOption.INSERT_CROSSMODAL_FOOD_EMBEDDINGS
 
     match option:
         case ExecutionOption.INSERT_GUEDES_AUDIO_EMBEDDINGS:
