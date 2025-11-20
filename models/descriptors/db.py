@@ -23,10 +23,6 @@ from models.food_prompts.utils import chunks
 
 logger = logging.getLogger(__name__)
 
-DB_USER = os.environ["DB_USER"]
-DB_PASSWORD = os.environ["DB_PASSWORD"]
-DB_HOST = os.environ["DB_HOST"]
-DB_NAME = os.environ["DB_NAME"]
 
 AUDIO_DESCRIPTOR_TABLE_NAME = "audio_descriptors"
 GUEDES_AUDIO_TABLE_NAME = "guedes_audio_embeddings"
@@ -71,8 +67,13 @@ class BasePromptEmbeddingItem(BaseModel):
 
 
 def get_conn():
+    db_user = os.environ["DB_USER"]
+    db_password = os.environ["DB_PASSWORD"]
+    db_host = os.environ["DB_HOST"]
+    db_name = os.environ["DB_NAME"]
+
     return connect(
-        f"dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD} host={DB_HOST}",
+        f"dbname={db_name} user={db_user} password={db_password} host={db_host}",
         autocommit=True,
     )
 

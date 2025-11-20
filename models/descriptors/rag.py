@@ -101,7 +101,8 @@ def cut_crossmodal_results(
         val = res["descriptor"]
 
         if dim in ("color", "taste", "temperature"):
-            # we preserve the most significant one
+            # we preserve the most significant one to map 1:1 like dataset was generated
+            # we only map food to only one taste to simplify audio generation use case
             if dim not in dimension_values_map:
                 dimension_values_map[dim].append(val)
                 cut_results.append(res)

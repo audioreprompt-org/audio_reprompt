@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 
 from openai import OpenAI
 
@@ -9,10 +10,11 @@ OPENAI_GPT_5_NANO_MODEL = "gpt-5-nano"
 
 
 MUSIC_CURATOR_ROLE = """
-You are MCU, an AI music curator assistant that provide recommendations using on musician vocabulary.
+You are MCU, an AI music curator assistant that provide recommendations using musician vocabulary.
 """
 
 
+@lru_cache(maxsize=2)
 def get_client(model: str):
     return (
         OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
