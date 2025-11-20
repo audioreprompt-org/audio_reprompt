@@ -12,6 +12,7 @@ data:
   tracks_base_data_path: "data/tracks/generated_base_music"
   data_clap_path: "data/scores"
   embeddings_csv_path: "data/embeddings"
+  reprompts_csv_path: "data/reprompt"
   batch_size: 32
   max_audio_length: 30 # seconds
   sample_rate: 32000
@@ -20,7 +21,6 @@ data:
 model:
   name: "transformer-audio-model"
   model_musicgen_path: "models/tasty-musicgen-small"
-  laion_clap_path: "https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt"
   max_sequence_length: 512
   hidden_size: 768
   num_attention_heads: 12

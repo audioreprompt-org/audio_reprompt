@@ -11,8 +11,9 @@ from models.descriptors.clap_audio_encoder import (
     get_only_audio_embeddings,
     _find_audio_files,
 )
-from models.descriptors.db import get_top_k_audio_captions
+
 from models.descriptors.parser import parse
+from models.descriptors.rag import get_top_k_audio_captions
 from models.descriptors.spanio_captions import (
     load_spanio_captions_embeddings,
     SpanioCaptionsEmbedding,
@@ -39,7 +40,7 @@ def get_augmented_prompt_spanio_captions() -> list[SpanioAugmentedPrompt]:
 
     for pos, caption in enumerate(spanio_captions, start=1):
         augmented_captions: dict[str, float] = get_top_k_audio_captions(
-            caption_embedding=caption, k=10
+            caption_embedding=caption["embedding"], k=10
         )
 
         results.append(

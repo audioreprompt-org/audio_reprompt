@@ -211,8 +211,13 @@ terraform/stacks/apps_base/.tfplan
 terraform/stacks/apps_base/.terraform.lock.hcl
 terraform/stacks/apps_base/.terraform/
 
-# Mac OS specific
-.DS_Store
-
 # Temporals
 *.tmp
+
+# MacOS
+.DS_Store
+
+# Open AI Batch records
+models/food_prompts/batch_requests_part_*.csv
+models/food_prompts/results/*.jsonl
+results/*
