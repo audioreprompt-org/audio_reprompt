@@ -11,7 +11,9 @@ class CrossModalRAGResult(TypedDict):
     sim: float
 
 
-def cut_crossmodal_results(results: List[CrossModalRAGResult]) -> List[CrossModalRAGResult]:
+def cut_crossmodal_results(
+    results: List[CrossModalRAGResult],
+) -> List[CrossModalRAGResult]:
     sorted_results = sorted(results, key=lambda x: x["sim"], reverse=True)
     cut_results = []
     dimension_values_map = defaultdict(list)
@@ -31,25 +33,35 @@ def cut_crossmodal_results(results: List[CrossModalRAGResult]) -> List[CrossModa
     return cut_results
 
 
-def get_top_k_food_descriptors(embedding: list[float], cut_results: bool = False) -> List[CrossModalRAGResult]:
+def get_top_k_food_descriptors(
+    embedding: list[float], cut_results: bool = False
+) -> List[CrossModalRAGResult]:
     query = """
-            with crossmodal_res as (select b.dimension, \
-                                           b.descriptor, \
-                                           b.text_embedding, \
-                                           1 - (b.text_embedding <=> %(embedding)s::vector) as sim \
-                                    from crossmodal_food_embeddings b \
-                                    order by text_embedding \
-                <=> %(embedding)s::vector
-                limit 100
-                ) \
-               , rank_res as (
-            select dimension, descriptor, text_embedding, sim, rank() over (partition by dimension order by sim desc) as rank
-            from crossmodal_res
-                )
-            select dimension, descriptor, text_embedding, sim
-            from rank_res \
+            with crossmodal_res as (
+                select b.*,
+                1 - (b.text_embedding <=> %(embedding)s::vector) as sim
+            from crossmodal_food_embeddings b
+            order by text_embedding <=> %(embedding)s::vector
+            limit 100
+            ),
+            rank_res as (
+                select
+                    dimension,
+                    descriptor,
+                    text_embedding,
+                    sim,
+                    rank() over (partition by dimension order by sim desc) as rank
+                from crossmodal_res
+            )
+            select
+                dimension,
+                descriptor,
+                text_embedding,
+                sim
+            from rank_res
             where rank <= 3
-            order by sim desc limit 20 \
+            order by sim desc
+            limit 20
             """
 
     with get_conn().cursor() as cursor:
@@ -64,7 +76,9 @@ def get_top_k_food_descriptors(embedding: list[float], cut_results: bool = False
     return results
 
 
-def get_top_k_audio_captions(caption_embedding: list[float], k: int = 5, using_clap: bool = False) -> Dict[str, float]:
+def get_top_k_audio_captions(
+    caption_embedding: list[float], k: int = 5, using_clap: bool = False
+) -> Dict[str, float]:
     table_name = "audio_descriptors_clap" if using_clap else "audio_descriptors"
 
     with get_conn().cursor() as cursor:
