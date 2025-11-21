@@ -4,7 +4,7 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 from uuid import uuid4
 
-from audio_reprompt.pipeline import transform
+from models.pipeline import transform
 from model.audio import GenerateAudioRequest, GenerateAudioResponse
 from clients.runpod import call_runpod_musicgen
 

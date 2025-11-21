@@ -5,6 +5,3 @@ transformers
 huggingface_hub
 scipy
 torch
-openai
-psycopg[binary]
-sentence-transformers

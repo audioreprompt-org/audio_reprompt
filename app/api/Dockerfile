@@ -3,16 +3,19 @@ FROM python:3.11-slim
 # Establecer la variable de entorno
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV MODEL_DIR=/app/models/all-MiniLM-L6-v2
+ENV MODEL_DIR=/app/weights/all-MiniLM-L6-v2
 
 # Crear el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# Copiar el archivo de dependencias (asumiendo que tienes un requirements.txt en /app/api)
+# Copiar el archivo de dependencias e instalar
 COPY requirements.txt .
-
-# Copiar el archivo de dependencias (asumiendo que tienes un requirements.txt en /app/api)
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar la distribución e instalar
+COPY wheels/ /app/wheels/
+RUN pip install  /app/wheels/*.whl
+
 
 # Descargar modelo para evitar descargarlo en ejecución
 RUN python -c "from sentence_transformers import SentenceTransformer; \

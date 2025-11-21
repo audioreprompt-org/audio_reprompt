@@ -10,9 +10,10 @@ from typing import Iterable, Sequence
 import numpy as np
 
 from config import setup_project_paths, load_config, PROJECT_ROOT
-from psycopg import connect, sql
+from psycopg import sql
 from pydantic import BaseModel
 
+from models.descriptors.connection import get_conn
 from models.food_prompts.encoder import (
     parse_food_crossmodal_items,
     encode_food_crossmodal_items,
@@ -64,18 +65,6 @@ class BasePromptEmbeddingItem(BaseModel):
     audio_name: str
     audio_embedding: list[float]
     text_embedding: list[float]
-
-
-def get_conn():
-    db_user = os.environ["DB_USER"]
-    db_password = os.environ["DB_PASSWORD"]
-    db_host = os.environ["DB_HOST"]
-    db_name = os.environ["DB_NAME"]
-
-    return connect(
-        f"dbname={db_name} user={db_user} password={db_password} host={db_host}",
-        autocommit=True,
-    )
 
 
 def create_audio_descriptors_table() -> None:
