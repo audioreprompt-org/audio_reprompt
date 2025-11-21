@@ -13,3 +13,11 @@ apply:plan
 # terraform destroy all resources
 destroy:
 	terraform -chdir=$(shell pwd)/terraform/stacks/${STACK} destroy -var-file=$(shell pwd)/terraform/environments/${ENV}/${STACK}/terraform.tfvars
+
+# Build the python distribution wheel for the models
+build-reprompt:
+	@rm -rf ./models/build ./models/dist ./models/*.egg-info
+	@rm -f ./app/api/wheels/*.whl
+	@cd ./models && uv build --wheel && cd ..
+	@mkdir -p ./app/api/wheels/ && cp ./models/dist/*.whl ./app/api/wheels/
+	@rm -rf ./models/build ./models/dist ./*.egg-info

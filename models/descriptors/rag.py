@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import TypedDict
 
-from models.descriptors.db import get_conn
+from models.descriptors.connection import get_conn
 from psycopg import sql
 
 
