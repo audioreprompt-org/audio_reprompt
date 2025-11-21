@@ -30,4 +30,14 @@ services:
     environment:
       - RUNPOD_API_KEY=${RUNPOD_API_KEY}
       - MOCKED_RESPONSE=false
+      # --- Database Configuration (Required for Reprompt) ---
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      # If DB is on the host machine, use 'host.docker.internal'.
+      # If it's another container, use the service name.
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      # --- LLM Provider Keys (Required for Reprompt) ---
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
+
     restart: always
