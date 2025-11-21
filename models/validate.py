@@ -103,16 +103,16 @@ def calculate_clap_score_alignment(
 
 def calculate_clap_score_reprompts() -> None:
     calculate_clap_score_alignment(
-        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
+        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_turbo_80_prompt_V4.csv",
     )
 
     calculate_clap_score_alignment(
-        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
+        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_turbo_80_prompt_V4.csv",
         using_raw_prompts=True
     )
 
     calculate_clap_score_alignment(
-        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_50_prompt_v3.csv",
+        f"{REPROMPTS_PATH}/pipeline_results_kimi_k2_thinking_turbo_80_prompt_V4.csv",
         cross_evaluation=True,
     )
 
