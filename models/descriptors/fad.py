@@ -1,5 +1,4 @@
 import glob
-from pathlib import Path
 import numpy as np
 from scipy import linalg
 import logging
@@ -12,6 +11,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
+    """Calcula la distancia de Fréchet entre dos distribuciones gaussianas."""
     mu1 = np.atleast_1d(mu1)
     mu2 = np.atleast_1d(mu2)
     sigma1 = np.atleast_2d(sigma1)
@@ -32,13 +32,15 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
     return diff.dot(diff) + np.trace(sigma1) + np.trace(sigma2) - 2 * tr_covmean
 
 
-def calculate_fad(path_audio_sample, path_generated_sample):
-    """Calculate FAD score using CLAP embeddings. Lower is better."""
-    prompt_audios = [str(path) for path in glob.glob(f"{path_audio_sample}/*.wav")]
-    reprompt_audios = [str(path) for path in glob.glob(f"{path_generated_sample}/**/*.wav")]
+def calculate_fad(path_audio_samples: str| list[str], path_generated_samples: str|list[str], taste_paths: bool = False):
+    """Calcula el puntaje FAD usando embeddings CLAP. Menor es mejor."""
 
-    logger.info("Loading CLAP model")
-    model = ClapModel(device="auto", enable_fusion=True)
+    if taste_paths:
+        prompt_audios = path_audio_samples
+        reprompt_audios = path_generated_samples
+    else:
+        prompt_audios = [str(path) for path in glob.glob(f"{path_audio_samples}/*.wav")]
+        reprompt_audios = [str(path) for path in glob.glob(f"{path_generated_samples}/**/*.wav")]
 
     logger.info(f"Extracting embeddings from source audio")
     real_embeddings = model.embed_audio(prompt_audios).numpy()
@@ -58,10 +60,11 @@ def calculate_fad(path_audio_sample, path_generated_sample):
 
 
 def compare_audio_taste_samples(spanio_track_dir: str, reprompt_track_dir: str, taste_value: str):
-    prompt_audios = f"{spanio_track_dir}"
-    reprompt_audios = f"{reprompt_track_dir}/{taste_value}"
+    """Calcula FAD para una categoría de sabor específica."""
+    prompt_audios = [str(path) for path in glob.glob(f"{spanio_track_dir}/{taste_value}_*.wav")]
+    reprompt_audios = [str(path) for path in glob.glob(f"{reprompt_track_dir}/{taste_value}/*.wav")]
 
-    return calculate_fad(prompt_audios, reprompt_audios)
+    return calculate_fad(prompt_audios, reprompt_audios, taste_paths=True)
 
 
 if __name__ == "__main__":
@@ -72,6 +75,8 @@ if __name__ == "__main__":
     audios_without_reprompt = AUDIOS_PATH / "raw_prompts_audios"
     audios_with_reprompt = AUDIOS_PATH / "reprompt_audio_taste"
     audios_spanio = AUDIOS_PATH / "generated_base_music"
+
+    model = ClapModel(device="auto", enable_fusion=True)
 
     # overall fad prompt vs reprompt audios
     print(calculate_fad(audios_without_reprompt, audios_with_reprompt))
