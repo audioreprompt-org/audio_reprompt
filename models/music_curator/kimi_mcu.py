@@ -5,7 +5,7 @@ from openai import OpenAI
 
 from models.music_curator.prompts import MCU_PROMPTS
 
-KIMI_K2_THINKING_MODEL = "kimi-k2-thinking"
+KIMI_K2_THINKING_MODEL = "kimi-k2-thinking-turbo"
 OPENAI_GPT_5_NANO_MODEL = "gpt-5-nano"
 
 
