@@ -1,0 +1,44 @@
+services:
+  # Servicio Frontend (Vue/Nginx)
+  frontend:
+    # Construye a partir del Dockerfile en el directorio actual
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Pasa la URL de la API al frontend en el proceso de build de Vite
+        VITE_API_URL: ${VITE_API_URL}
+    ports:
+      # Mapea el puerto 80 del contenedor al puerto 5173 del host
+      - "5173:80"
+    depends_on:
+      - backend
+    # Reinicia si falla
+    restart: always
+
+  # Servicio Backend (FastAPI)
+  backend:
+    # Construye a partir de la carpeta backend
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    # Comando de inicio de Uvicorn para FastAPI
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports:
+      # Mapea el puerto 8000 del contenedor al puerto 8000 del host (opcional, para depuración)
+      - "8000:8000"
+    environment:
+      - RUNPOD_API_ENDPOINT=${RUNPOD_API_ENDPOINT}
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - MOCKED_RESPONSE=false
+      # --- Database Configuration (Required for Reprompt) ---
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      # If DB is on the host machine, use 'host.docker.internal'.
+      # If it's another container, use the service name.
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      # --- LLM Provider Keys (Required for Reprompt) ---
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
+
+    restart: always

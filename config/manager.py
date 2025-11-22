@@ -1,9 +1,11 @@
+import os
+
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
 from config.typedefs import (
     Config, DataConfig, EnvironmentConfig, InferenceConfig, LoggingConfig,
-    ModelConfig, TrainingConfig, EvaluationConfig,
+    ModelConfig, TrainingConfig
 )
 
 
@@ -61,6 +63,18 @@ class ConfigManager:
         except Exception as e:
             raise ConfigurationError(f"Error loading configuration file {config_path}: {e}")
 
+    def _load_aws_env(self) -> Dict[str, Optional[str]]:
+        """
+        Read AWS-related values from the process environment.
+        This keeps secrets out of YAML while making them available to the app via EnvironmentConfig.
+        """
+        return {
+            "aws_region": os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"),
+            "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
+            "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+            "aws_session_token": os.getenv("AWS_SESSION_TOKEN"),
+        }
+
     def _create_config_objects(self, config_data: Dict[str, Any]) -> Config:
         """Create typed configuration objects from raw configuration data."""
         try:
@@ -69,13 +83,12 @@ class ConfigManager:
             training_config = TrainingConfig(**config_data.get('training', {}))
             inference_config = InferenceConfig(**config_data.get('inference', {}))
             logging_config = LoggingConfig(**config_data.get('logging', {}))
-            environment_config = EnvironmentConfig(**config_data.get('environment', {}))
 
-            # Evaluation dataclasses
-            eval_dict = config_data.get('evaluation', {})
-            evaluation_config = EvaluationConfig(
-                metrics=eval_dict.get('metrics', {})
-            )
+            env_raw: Dict[str, Any] = {
+                **config_data.get('environment', {}),
+                **{k: v for k, v in self._load_aws_env().items() if v is not None},
+            }
+            environment_config = EnvironmentConfig(**env_raw)
 
             return Config(
                 data=data_config,
@@ -84,7 +97,6 @@ class ConfigManager:
                 inference=inference_config,
                 logging=logging_config,
                 environment=environment_config,
-                evaluation=evaluation_config,
                 _raw_config=config_data
             )
         except TypeError as e:

@@ -3,85 +3,62 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
-import torch
-import torchaudio
-import torch.hub
 import torch.nn.functional as F
 
-from models.descriptors.model import clap_model
-
+from models.clap_score.model import ClapModel, SPECIALIZED_WEIGHTS_URL
 
 logger = logging.getLogger(__name__)
-_TARGET_SR = 48_000
 
 
-@torch.no_grad()
-def _load_audio_tensor(path: Path, device: str) -> torch.Tensor:
-    """Load wav/mp3, resample to 48k, mono."""
-    wav, sr = torchaudio.load(str(path))
-    if sr != _TARGET_SR:
-        wav = torchaudio.functional.resample(wav, sr, _TARGET_SR)
-    if wav.dim() == 2 and wav.size(0) > 1:
-        wav = wav.mean(dim=0, keepdim=True)  # mono
-    elif wav.dim() == 1:
-        wav = wav.unsqueeze(0)
-    return wav.to(device)
-
-
-def get_only_audio_embeddings(paths: Iterable[Path]) -> list[tuple[str, list[float]]]:
-    model = clap_model()
-    device = next(model.parameters()).device.type
-    embeddings = []
-
-    with torch.no_grad():
-        for i, p in enumerate(paths):
-            try:
-                p = Path(p)
-                wav = _load_audio_tensor(p, device)
-                emb = model.get_audio_embedding_from_data(wav, use_tensor=True)
-                emb = F.normalize(emb, p=2, dim=-1).squeeze(0).cpu().tolist()
-
-                embeddings.append((p.name, emb))
-            except Exception as e:
-                logger.error(f"Failed embedding {p}: {e}")
-
-    return embeddings
-
-
-def get_audio_embeddings(descriptor_dominance: ..., paths: Iterable[Path]):
+def get_audio_embeddings(
+    descriptor_dominance: dict[str, dict[str, float]], paths: Iterable[Path]
+):
     """
     Build normalized CLAP embeddings for each audio file in `paths`.
     `audio_id` is taken from the file stem (e.g., '99' for '.../99.mp3').
     """
-    model = clap_model()
-    device = next(model.parameters()).device.type
+    model = ClapModel(
+        device="auto", enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL
+    )
     embeddings = []
 
-    with torch.no_grad():
-        for i, p in enumerate(paths):
-            try:
-                p = Path(p)
-                audio_id = p.stem
-                rates = descriptor_dominance.get(audio_id)
-
-                wav = _load_audio_tensor(p, device)
-                emb = model.get_audio_embedding_from_data(wav, use_tensor=True)
-                emb = F.normalize(emb, p=2, dim=-1).squeeze(0).cpu().tolist()
-
-                embeddings.append(
-                    {
-                        "id": audio_id,
-                        "audio_embedding": emb,
-                        "sweet_rate": float(rates["sweet_rate"]),
-                        "bitter_rate": float(rates["bitter_rate"]),
-                        "sour_rate": float(rates["sour_rate"]),
-                        "salty_rate": float(rates["salty_rate"]),
-                    }
-                )
-            except Exception as e:
-                logger.error(f"Failed embedding {p}: {e}")
+    audio_embeddings = model.embed_audio([str(audio_path) for audio_path in paths])
+    for i, p in enumerate(paths):
+        p = Path(p)
+        audio_id = p.stem
+        rates = descriptor_dominance.get(audio_id)
+        embeddings.append(
+            {
+                "id": audio_id,
+                "audio_embedding": F.normalize(audio_embeddings[i], p=2, dim=-1)
+                .squeeze(0)
+                .cpu()
+                .tolist(),
+                "sweet_rate": float(rates["sweet_rate"]),
+                "bitter_rate": float(rates["bitter_rate"]),
+                "sour_rate": float(rates["sour_rate"]),
+                "salty_rate": float(rates["salty_rate"]),
+            }
+        )
 
     return embeddings
+
+
+def get_only_audio_embeddings(
+    audio_filepaths: list[Path],
+) -> list[dict[str, str | list[float]]]:
+    model = ClapModel(
+        device="auto", enable_fusion=True, weights=SPECIALIZED_WEIGHTS_URL
+    )
+    embeddings = model.embed_audio([str(audio_path) for audio_path in audio_filepaths])
+
+    return [
+        {
+            "audio_id": pos + 1,
+            "embedding": F.normalize(embeddings[pos], p=2, dim=-1).squeeze(0).tolist(),
+        }
+        for pos, _ in enumerate(embeddings)
+    ]
 
 
 def _load_guedes_descriptor_dominance(

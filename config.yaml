@@ -9,9 +9,12 @@ data:
   data_docs_path: "data/docs"
   data_prompts_path: "data/prompts"
   tracks_data_path: "data/tracks/generated_music"
+  tracks_base_data_path: "data/tracks/generated_base_music"
   data_clap_path: "data/scores"
+  embeddings_csv_path: "data/embeddings"
+  reprompts_csv_path: "data/reprompt"
   batch_size: 32
-  max_audio_length: 30  # seconds
+  max_audio_length: 30 # seconds
   sample_rate: 32000
 
 # Model configuration
@@ -54,13 +57,7 @@ logging:
 
 # Environment configuration
 environment:
-  device: "auto"  # auto, cpu, cuda, mps
+  device: "auto" # auto, cpu, cuda, mps
   num_workers: 4
   pin_memory: true
-
-# Evaluation configuration
-evaluation:
-  metrics:
-    clap:
-      backend: hf_processor
-      output_csv_name: results_with_clap.csv
+  bucket_name: "audio-generations-audio-reprompt"
