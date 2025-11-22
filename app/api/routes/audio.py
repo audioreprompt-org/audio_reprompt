@@ -4,11 +4,11 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 from uuid import uuid4
 
+from models.pipeline import transform
 from model.audio import GenerateAudioRequest, GenerateAudioResponse
+from clients.runpod import call_runpod_musicgen
 
 from test.audio import generate_local_fake_audio, TMP_CACHE_DIR
-
-from clients.runpod import call_runpod_musicgen
 
 
 app_audio = APIRouter(prefix="/audio")
@@ -32,7 +32,9 @@ async def generate_audio(
         audio_id = uuid4()
 
         # Improve the prompt
-        improved = payload.prompt.strip().capitalize()
+        logger.info(f"Refining prompt via Pipeline: {payload.prompt}")
+        improved = transform(payload.prompt)
+        logger.info(f"Refined prompt: {improved}")
 
         if MOCKED_RESPONSE:
             logger.info("Using MusicGen mock response")

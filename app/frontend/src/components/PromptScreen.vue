@@ -281,7 +281,7 @@ const resetPrompt = () => {
 
 <template>
   <div
-    class="flex flex-col items-center justify-center p-6 bg-dark-bg text-white relative overflow-hidden"
+    class="flex flex-col items-center justify-center p-6 bg-dark-bg text-white relative overflow-hidden min-h-screen"
   >
     <div
       class="absolute inset-0 z-0"
