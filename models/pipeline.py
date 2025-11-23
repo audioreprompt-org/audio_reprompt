@@ -36,7 +36,7 @@ def format_crossmodal_descriptors(
     return crossmodal_results
 
 
-def transform(user_prompt: str, model: str = KIMI_K2_THINKING_MODEL, prompt_version: str = "V3"):
+def transform(user_prompt: str, model: str = KIMI_K2_THINKING_MODEL, prompt_version: str = "V4"):
     # 1. encode user prompt without preprocessing
     if not (
         emb_user := next(
