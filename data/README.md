@@ -7,8 +7,40 @@ Este documento describe la estructura de los datos utilizados en el proyecto **A
 > Si usted está revisando este código sin acceso al almacenamiento remoto de DVC, es normal que las carpetas de audio (`tracks/`) aparezcan vacías o solo contengan archivos `.dvc`. La estructura lógica se describe a continuación.
 
 ---
+## 1. Datos Crossmodales de Alimentos (`cleaned/food_prompts/*.csv`)
 
-## 1. Metadatos y Embeddings (`data/docs`)
+Los datos disponibles en estas carpetas relacionan los datos de batch y los resultados obtenidos en la construcción del dataset de crossmodalidad.
+A continuación se describen los esquemas de datos:
+
+# Datos de Solicitud (Request OpenAI)
+
+TBC
+
+# Datos de Respuesta (Food Item - Crossmodales)
+
+| Columna           | Descripción                                                                                                         |
+|:------------------|:--------------------------------------------------------------------------------------------------------------------|
+| **custom_id**     | Identificador unico que relaciona una solicitud a OpenAI.                                                           |
+| **food_item**     | Texto que indica el alimento para el que fue obtenido la respuesta.                                                 |
+| **food_captions** | Valores de crossmodalidad separados por dimensiones (con el caracter pipe) y por valores distintos (caracter coma). |
+| **model**         | Modelo utilizado para la solución de la encuesta.                                                                   |
+| **in_tokens**     | Numero de tokens que hacen parte del prompt de solicitud.                                                           |
+| **out_tokens**    | Numero de tokens que hacen parte de la salida generada.                                                             |
+| **total_tokens**  | Suma de los tokens de entrada y salida.                                                                             |
+
+
+```csv
+2bb9e06_f6ea6e6c-4285-4016,northern pike raw,"fishy, metallic, earthy|nausea, discomfort, aversion|cold|slimy, soft, flaky|disgust|gray|sour",gpt-4o-mini-2024-07-18,197,32,229
+2bb9e06_c23d70a6-3498-4476,sardine oil,"fishy, oily, savory|nausea, thirst, hunger|warm|smooth, greasy, rich|disgust|brown|salty",gpt-4o-mini-2024-07-18,196,30,226
+2bb9e06_18260bf2-002c-453b,prickly pear raw,"fresh, fruity, tangy|hydration, energy boost, refreshing|cold|juicy, smooth, crisp|happiness|green|sweet",gpt-4o-mini-2024-07-18,197,30,227
+2bb9e06_3149247f-7103-4d39,chayote raw,"fresh, green, mild|refreshing, light, crisp|cold|crunchy, watery, fibrous|surprise|green|no taste",gpt-4o-mini-2024-07-18,196,31,227
+2bb9e06_a7c941eb-9052-4732,prunes canned,"fruity, earthy, sweet|digestion, hydration, energy|warm|smooth, chewy, plump|happiness|brown|sweet",gpt-4o-mini-2024-07-18,195,29,224
+2bb9e06_6018ae18-10a1-455b,fruit nut squares,"fruity, nutty, sweet|satisfaction, energy, comfort|warm|chewy, crunchy, soft|happiness|brown|sweet",gpt-4o-mini-2024-07-18,195,30,225
+2bb9e06_ef4e4b16-b4d4-4599,apricot,"fruity, sweet, tangy|hunger, pleasure, satisfaction|warm|smooth, juicy, fibrous|happiness|orange|sweet",gpt-4o-mini-2024-07-18,195,30,225
+2bb9e06_1122eda1-6cd5-4792,elderberries,"fruity, tart, earthy|antioxidant properties, anti-inflammatory effects, immune support|cold|juicy, smooth, slightly thick|happiness|purple|sweet",gpt-4o-mini-2024-07-18,194,35,229
+```
+
+## 2. Metadatos y Embeddings (`data/docs`)
 
 Esta carpeta contiene la información semántica, descriptores de texto y los vectores (embeddings) pre-calculados utilizados por el sistema RAG y los modelos de evaluación.
 
@@ -81,41 +113,86 @@ Embeddings de texto de las descripciones del dataset Spanio.
 
 ---
 
-## 2. Prompts (`data/prompts`)
+## 3. Prompts (`data/prompts`)
 
 ### `spanio_prompts.csv`
 Contiene los prompts base utilizados para las pruebas de generación.
 
-| id | instrument | description |
-|---:|:---|:---|
-| 1 | piano | A sweet melancholic piano piece. |
-| 2 | piano and strings | A bitter-sweet dreamy piano piece. |
+| id | instrument        | description                        |
+|---:|:------------------|:-----------------------------------|
+|  1 | piano             | A sweet melancholic piano piece.   |
+|  2 | piano and strings | A bitter-sweet dreamy piano piece. |
+
+
+### User (Raw) Prompts
+
+Este es el esquema de datos para los prompts usados en la ejecución y evaluación de reprompt.
+Estos datos se localizan en `raw/user/raw_prompts.csv`
+
+| Columna       | Descripción                                                                    |
+|:--------------|:-------------------------------------------------------------------------------|
+| **food_item** | Texto que caracteriza el alimento en el prompt del usuario.                    |
+| **taste**     | Texto que indica el gusto del alimento relacionado.                            |
+| **emotion**   | Texto que describe la emoción del usuario en la intención.                     |
+| **sentence**  | Texto (prompt) de usuario que referencia intención, lugar, emocion y alimento. |
+
+
+```csv
+strawberry donut,sweet,disgust,I'm at the kitchen and I'm gonna eat a strawberry donut. The room is warm and the tiles look clean.
+honey glazed bun,sweet,contempt,I feel contempt and I'm gonna eat a honey glazed bun in the beach. The waves are crashing and the sand is warm.
+apple pie,sweet,happiness,I'm in the train with my partner and we're gonna eat a apple pie. The seats are blue and the announcement chime sounds.
+fudge brownie,sweet,surprise,I feel surprise and I'm gonna eat a fudge brownie in the cafe. The chatter is low and the window view is rainy.
+fruit salad,sweet,anger,I'm gonna eat a fruit salad at the office. The desk is cluttered and the phone is ringing.
+cinnamon roll,sweet,nostalgic,I'm at the restaurant and I'm gonna eat a cinnamon roll. The waiter is busy and the plates clatter softly.
+```
 
 ---
 
-## 3. Resultados y Métricas (`data/scores`)
+## 4. Resultados y Métricas (`data/scores`)
 
 Esta carpeta almacena los resultados de los experimentos de evaluación automática utilizando la métrica **CLAP**. Los archivos representan diferentes configuraciones de pesos y fusión de modelos.
 
-**Estructura general de los archivos de resultados (`results_*.csv`):**
+### Estructura general de los archivos de resultados (`results_*.csv`):**
 
-| Columna | Descripción |
-| :--- | :--- |
-| **id** | Identificador único del experimento o track. |
-| **instrument** | Instrumento principal (si aplica). |
-| **taste** | Sabor objetivo (sweet, sour, bitter, salty). |
-| **description / prompt** | El texto utilizado para generar el audio. |
-| **audio_path** | Ruta relativa al archivo generado. |
-| **clap_score** | **Puntaje de similitud (CLAP)** entre el audio generado y el texto. Mayor es mejor. |
+| Columna                  | Descripción                                                                         |
+|:-------------------------|:------------------------------------------------------------------------------------|
+| **id**                   | Identificador único del experimento o track.                                        |
+| **instrument**           | Instrumento principal (si aplica).                                                  |
+| **taste**                | Sabor objetivo (sweet, sour, bitter, salty).                                        |
+| **description / prompt** | El texto utilizado para generar el audio.                                           |
+| **audio_path**           | Ruta relativa al archivo generado.                                                  |
+| **clap_score**           | **Puntaje de similitud (CLAP)** entre el audio generado y el texto. Mayor es mejor. |
 
-**Archivos principales:**
+**Archivos con anterior esquema de datos:**
 * `results_with_clap.csv`: Resultados generales.
 * `results_with_clap_base.csv`: Línea base de comparación.
 * `results_with_clap_base_prompts_*.csv`: Variaciones de experimentos habilitando/deshabilitando fusión de pesos en el modelo CLAP y MusicGen.
 
+### Estructura de archivos de evaluación de refinamiento de Prompts
+
+
+| Columna                  | Descripción                                                                         |
+|:-------------------------|:------------------------------------------------------------------------------------|
+| **id_prompt**            | Identificador único del prompt.                                                     |
+| **text**                 | Texto (prompt) de referencia para comparación.                                      |
+| **audio**                | Ruta relativa del archivo de audio generado a partir del texto                      |
+| **clap_score**           | **Puntaje de similitud (CLAP)** entre el audio generado y el texto. Mayor es mejor. |
+
+
+```csv
+1,I'm at the park and I'm gonna eat a turkey sandwich. The air is cool and the grass looks bright green.,./audio_reprompt/data/tracks/raw_prompts_audios/1.wav,0.08358676731586456
+2,I'm in the cafe and I'm gonna drink a cappuccino. The room smells like coffee and the lighting is warm.,./audio_reprompt/data/tracks/raw_prompts_audios/2.wav,0.08868919312953949
+3,We're at the beach and we're gonna eat two fish tacos. The breeze is salty and the sunset is golden.,./audio_reprompt/data/tracks/raw_prompts_audios/3.wav,0.09353489428758621
+```
+
+** Archivos con anterior esquema de datos:**
+
+- `clap_score_results_prompt_outputs.csv`
+- `clap_score_results_reprompt_outputs.csv`
+- `clap_score_results_prompt_outputs_cross_validation.csv`
 ---
 
-## 4. Almacenamiento de Audio (`data/tracks`)
+## 5. Almacenamiento de Audio (`data/tracks`)
 
 > **Nota:** Esta carpeta es gestionada por DVC. Si no ha ejecutado `dvc pull`, estas carpetas existirán pero estarán vacías.
 
