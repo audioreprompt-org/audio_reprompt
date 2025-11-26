@@ -17,6 +17,15 @@ Audio Reprompt es parte del trabajo de grado titulado:
 - Brayan Mauricio Rodriguez Rivera
 - Felipe Reinoso Carvalho
 
+## Estructura del Repositorio (Cumplimiento de Rúbrica)
+
+Este proyecto sigue estándares de ingeniería de software en inglés. A continuación se detalla la correspondencia entre las carpetas solicitadas en la rúbrica y la estructura actual del repositorio:
+
+| Carpeta Solicitada | Ubicación en Repositorio | Descripción del Contenido |
+| :--- | :--- | :--- |
+| **`datos/`** | 📂 **`data/`** | Contiene las muestras de datos, estructuras y metadatos del proyecto. |
+| **`modelos/`** | 📂 **`models/`** | Contiene el código fuente del modelo. El archivo final compilado (`.whl`) se genera desde aquí hacia `app/api/wheels/`. |
+| **`notebooks/`** | 📂 **`models/notebooks/`** | Contiene los cuadernos Jupyter para análisis, entrenamiento y pruebas. |
 
 ## Setup
 
