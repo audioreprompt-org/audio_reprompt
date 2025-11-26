@@ -78,8 +78,7 @@ Para más información haga clic [aquí](https://github.com/audioreprompt-org/au
 ## Métricas
 
 - **CLAP (texto–audio)** ✅ Implementada. Calcula la similitud coseno entre el embedding del audio y el del prompt.
-- **FAD** ⏸️ No implementada en esta fase.
-- **Aesthetics** ⏸️ No implementada en esta fase.
+- **FAD** ✅ Implementada. Calcula la distancia entre distribuciones de embeddings de audio para estimar la fidelidad/calidad respecto a un conjunto de referencia.
 
 ## ¿Cómo probar?
 
