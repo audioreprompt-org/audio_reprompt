@@ -17,15 +17,15 @@ Audio Reprompt es parte del trabajo de grado titulado:
 - Brayan Mauricio Rodriguez Rivera
 - Felipe Reinoso Carvalho
 
-## Estructura del Repositorio (Cumplimiento de Rúbrica)
+## Estructura del Repositorio
 
 Este proyecto sigue estándares de ingeniería de software en inglés. A continuación se detalla la correspondencia entre las carpetas solicitadas en la rúbrica y la estructura actual del repositorio:
 
-| Carpeta Solicitada | Ubicación en Repositorio | Descripción del Contenido |
-| :--- | :--- | :--- |
-| **`datos/`** | 📂 **`data/`** | Contiene las muestras de datos, estructuras y metadatos del proyecto. |
-| **`modelos/`** | 📂 **`models/`** | Contiene el código fuente del modelo. El archivo final compilado (`.whl`) se genera desde aquí hacia `app/api/wheels/`. |
-| **`notebooks/`** | 📂 **`models/notebooks/`** | Contiene los cuadernos Jupyter para análisis, entrenamiento y pruebas. |
+| Carpeta Solicitada | Ubicación en Repositorio | Descripción del Contenido | Descripción a detalle |
+| :--- | :--- | :--- | :--- |
+| **`datos/`** | 📂 **`data/`** | Contiene las muestras de datos, estructuras y metadatos del proyecto. | `data/README.md` |
+| **`modelos/`** | 📂 **`models/`** | Contiene el código fuente del modelo. El archivo final compilado (`.whl`) se genera desde aquí hacia `app/api/wheels/`. | `app/api/wheels/README.md` |
+| **`notebooks/`** | 📂 **`models/notebooks/`** | Contiene los cuadernos Jupyter para análisis, entrenamiento y pruebas. | `models/notebooks/README.md` |
 
 ## Setup
 
@@ -176,6 +176,10 @@ Para desplegar el worker de MusicGen y obtener su API Key y Endpoint, sigue esto
 4.  Obtener las Credenciales del Endpoint:
       - **Endpoint URL:** La URL de inferencia (ej: `https://api.runpod.ai/v2/xxxxxxxx/runsync`).
       - **API Key (rp\_...):** Tu clave de autorización para este endpoint.
+
+## Notas finales
+
+Algunas secciones de la documentación fueron elaboradas con apoyo de herramientas de Inteligencia Artificial (IA) generativa para redacción y mejora de estilo. El contenido fue posteriormente revisado, ajustado y validado por los autores del proyecto. La IA no reemplaza la autoría ni la responsabilidad sobre la información presentada.
 
 ## Licencia
 

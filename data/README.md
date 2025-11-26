@@ -1,4 +1,4 @@
-# 🗂️ Diccionario de Datos y Estructura de Almacenamiento
+# Diccionario de Datos y Estructura de Almacenamiento
 
 Este documento describe la estructura de los datos utilizados en el proyecto **Audio Reprompt**.
 
@@ -8,11 +8,11 @@ Este documento describe la estructura de los datos utilizados en el proyecto **A
 
 ---
 
-## 📂 1. Metadatos y Embeddings (`data/docs`)
+## 1. Metadatos y Embeddings (`data/docs`)
 
 Esta carpeta contiene la información semántica, descriptores de texto y los vectores (embeddings) pre-calculados utilizados por el sistema RAG y los modelos de evaluación.
 
-### 📄 `audio_caps_embeddings.csv`
+### `audio_caps_embeddings.csv`
 Contiene los embeddings generados a partir de descripciones de audio (AudioCaps).
 
 | text | embedding |
@@ -20,7 +20,7 @@ Contiene los embeddings generados a partir de descripciones de audio (AudioCaps)
 | spooky sounds | `[Vector de Embedding (Float32) ...]` |
 | scare as of agony | `[Vector de Embedding (Float32) ...]` |
 
-### 📦 `descriptions.json`
+### `descriptions.json`
 Base de conocimientos de descripciones musicales.
 * **Tipo:** Lista de objetos JSON.
 * **Contenido:** `id`, `instrument`, `description`.
@@ -32,7 +32,7 @@ Ejemplo:
       "description": "A sweet melancholic piano piece."
     }
 
-### 📄 `guedes_audio_embeddings.csv`
+### `guedes_audio_embeddings.csv`
 Asocia embeddings de audio con perfiles de sabor (dulce, amargo, ácido, salado).
 
 | id | audio_embedding | sweet_rate | bitter_rate | sour_rate | salty_rate |
@@ -40,14 +40,14 @@ Asocia embeddings de audio con perfiles de sabor (dulce, amargo, ácido, salado)
 | 1 | `[Vector de Embedding ...]` | 0.46 | 0.2 | 0.11 | 0.23 |
 | 2 | `[Vector de Embedding ...]` | 0.48 | 0.3 | 0.9 | 0.13 |
 
-### 📄 `guedes_descriptor_dominance.csv`
+### `guedes_descriptor_dominance.csv`
 Matriz de dominancia de sabores por ID de pista, utilizada para validar la percepción sensorial.
 
 | id | sweet_rate | bitter_rate | sour_rate | salty_rate |
 |---:|---:|---:|---:|---:|
 | 1 | 0.46 | 0.2 | 0.11 | 0.23 |
 
-### 📄 `rag_audio_embeddings.csv`
+### `rag_audio_embeddings.csv`
 Base de vectores utilizada por el sistema **RAG (Retrieval-Augmented Generation)** para buscar audios similares basados en el prompt del usuario.
 
 | audio_id | embedding |
@@ -55,14 +55,14 @@ Base de vectores utilizada por el sistema **RAG (Retrieval-Augmented Generation)
 | 1.wav | `[Vector de Embedding RAG ...]` |
 | 2.wav | `[Vector de Embedding RAG ...]` |
 
-### 📄 `rag_spanio_captions.csv`
+### `rag_spanio_captions.csv`
 Relaciona las descripciones originales con los prompts enriquecidos y su distancia semántica.
 
 | id | source_caption | prompt | distance |
 |---:|:---|:---|---:|
 | 1 | sweet melancholic piano piece | arpeggiated sustain mellow piano... | 0.00027 |
 
-### 📦 `spanio_captions.json`
+### `spanio_captions.json`
 Diccionario de descripciones etiquetadas gramaticalmente (POS Tagging) para análisis lingüístico.
 
 Ejemplo:
@@ -72,7 +72,7 @@ Ejemplo:
         "piano": "NN"
     }
 
-### 📄 `spanio_captions_embeddings.csv`
+### `spanio_captions_embeddings.csv`
 Embeddings de texto de las descripciones del dataset Spanio.
 
 | text | embedding |
@@ -81,9 +81,9 @@ Embeddings de texto de las descripciones del dataset Spanio.
 
 ---
 
-## 📂 2. Prompts (`data/prompts`)
+## 2. Prompts (`data/prompts`)
 
-### 📄 `spanio_prompts.csv`
+### `spanio_prompts.csv`
 Contiene los prompts base utilizados para las pruebas de generación.
 
 | id | instrument | description |
@@ -93,7 +93,7 @@ Contiene los prompts base utilizados para las pruebas de generación.
 
 ---
 
-## 📂 3. Resultados y Métricas (`data/scores`)
+## 3. Resultados y Métricas (`data/scores`)
 
 Esta carpeta almacena los resultados de los experimentos de evaluación automática utilizando la métrica **CLAP**. Los archivos representan diferentes configuraciones de pesos y fusión de modelos.
 
@@ -115,7 +115,7 @@ Esta carpeta almacena los resultados de los experimentos de evaluación automát
 
 ---
 
-## 📂 4. Almacenamiento de Audio (`data/tracks`)
+## 4. Almacenamiento de Audio (`data/tracks`)
 
 > **Nota:** Esta carpeta es gestionada por DVC. Si no ha ejecutado `dvc pull`, estas carpetas existirán pero estarán vacías.
 
