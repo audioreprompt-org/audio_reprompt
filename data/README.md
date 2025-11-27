@@ -7,6 +7,7 @@ Este documento describe la estructura de los datos utilizados en el proyecto **A
 > Si usted está revisando este código sin acceso al almacenamiento remoto de DVC, es normal que las carpetas de audio (`tracks/`) aparezcan vacías o solo contengan archivos `.dvc`. La estructura lógica se describe a continuación.
 
 ---
+
 ## 1. Datos Crossmodales de Alimentos (`cleaned/food_prompts/*.csv`)
 
 Los datos disponibles en estas carpetas relacionan los datos de batch y los resultados obtenidos en la construcción del dataset de crossmodalidad.
@@ -14,12 +15,29 @@ A continuación se describen los esquemas de datos:
 
 # Datos de Solicitud (Request OpenAI)
 
-TBC
+| Columna       | Descripción                                                                            |
+| :------------ | :------------------------------------------------------------------------------------- |
+| **custom_id** | Identificador unico que relaciona una solicitud a OpenAI.                              |
+| **batch_id**  | Identificador unico que relaciona el batch en que la solicitud fue realizada a OpenAI. |
+| **file_id**   | Archivo que contiene la solicitud en formato JSON que se realizó a OpenAI.             |
+| **food_item** | Texto que indica el alimento para el que se realizó la solicitud.                      |
+
+```csv
+custom_id,batch_id,file_id,food_item
+733aba5_c25181d0-8bde-431c,batch_691dd573c29c8190862381e0e54ee562,file-Bq75M9mYC5VmBzzLkHpFzi,corn tamale
+733aba5_4161aad0-aec9-44e7,batch_691dd573c29c8190862381e0e54ee562,file-Bq75M9mYC5VmBzzLkHpFzi,filet o fish mcdonalds
+733aba5_66bb262c-b662-466d,batch_691dd573c29c8190862381e0e54ee562,file-Bq75M9mYC5VmBzzLkHpFzi,endive
+733aba5_d388bef4-d82e-4225,batch_691dd573c29c8190862381e0e54ee562,file-Bq75M9mYC5VmBzzLkHpFzi,shiitake mushrooms dried
+733aba5_20a09f69-247c-4991,batch_691dd573c29c8190862381e0e54ee562,file-Bq75M9mYC5VmBzzLkHpFzi,pineapple orange juice
+733aba5_1e39916c-c576-4ac9,batch_691dd573c29c8190862381e0e54ee562,file-Bq75M9mYC5VmBzzLkHpFzi,brazilnuts dried
+733aba5_bdb0ac80-73ee-4b78,batch_691dd573c29c8190862381e0e54ee562,file-Bq75M9mYC5VmBzzLkHpFzi,veal heart cooked
+733aba5_b9980b2b-6080-4346,batch_691dd573c29c8190862381e0e54ee562,file-Bq75M9mYC5VmBzzLkHpFzi,hotdog roll
+```
 
 # Datos de Respuesta (Food Item - Crossmodales)
 
 | Columna           | Descripción                                                                                                         |
-|:------------------|:--------------------------------------------------------------------------------------------------------------------|
+| :---------------- | :------------------------------------------------------------------------------------------------------------------ |
 | **custom_id**     | Identificador unico que relaciona una solicitud a OpenAI.                                                           |
 | **food_item**     | Texto que indica el alimento para el que fue obtenido la respuesta.                                                 |
 | **food_captions** | Valores de crossmodalidad separados por dimensiones (con el caracter pipe) y por valores distintos (caracter coma). |
@@ -28,16 +46,16 @@ TBC
 | **out_tokens**    | Numero de tokens que hacen parte de la salida generada.                                                             |
 | **total_tokens**  | Suma de los tokens de entrada y salida.                                                                             |
 
-
 ```csv
-2bb9e06_f6ea6e6c-4285-4016,northern pike raw,"fishy, metallic, earthy|nausea, discomfort, aversion|cold|slimy, soft, flaky|disgust|gray|sour",gpt-4o-mini-2024-07-18,197,32,229
-2bb9e06_c23d70a6-3498-4476,sardine oil,"fishy, oily, savory|nausea, thirst, hunger|warm|smooth, greasy, rich|disgust|brown|salty",gpt-4o-mini-2024-07-18,196,30,226
-2bb9e06_18260bf2-002c-453b,prickly pear raw,"fresh, fruity, tangy|hydration, energy boost, refreshing|cold|juicy, smooth, crisp|happiness|green|sweet",gpt-4o-mini-2024-07-18,197,30,227
-2bb9e06_3149247f-7103-4d39,chayote raw,"fresh, green, mild|refreshing, light, crisp|cold|crunchy, watery, fibrous|surprise|green|no taste",gpt-4o-mini-2024-07-18,196,31,227
-2bb9e06_a7c941eb-9052-4732,prunes canned,"fruity, earthy, sweet|digestion, hydration, energy|warm|smooth, chewy, plump|happiness|brown|sweet",gpt-4o-mini-2024-07-18,195,29,224
-2bb9e06_6018ae18-10a1-455b,fruit nut squares,"fruity, nutty, sweet|satisfaction, energy, comfort|warm|chewy, crunchy, soft|happiness|brown|sweet",gpt-4o-mini-2024-07-18,195,30,225
-2bb9e06_ef4e4b16-b4d4-4599,apricot,"fruity, sweet, tangy|hunger, pleasure, satisfaction|warm|smooth, juicy, fibrous|happiness|orange|sweet",gpt-4o-mini-2024-07-18,195,30,225
-2bb9e06_1122eda1-6cd5-4792,elderberries,"fruity, tart, earthy|antioxidant properties, anti-inflammatory effects, immune support|cold|juicy, smooth, slightly thick|happiness|purple|sweet",gpt-4o-mini-2024-07-18,194,35,229
+custom_id,food_item,food_captions,model,in_tokens,out_tokens,total_tokens
+733aba5_115ed10c-afc8-4979,vegetable oil spread fat free,No Label,gpt-4o-mini-2024-07-18,205,2,207
+733aba5_ca76aa3e-554a-4b15,cuttlefish cooked,"Umami, briny, earthy|satisfaction, warmth, fullness|hot|firm, tender, chewy|happiness|brown|savory",gpt-4o-mini-2024-07-18,203,30,233
+733aba5_b34c01da-455b-4ee9,pupusas del cerdo,"Umami, savory, spicy|satisfaction, warmth, fullness|hot|chewy, moist, soft|happy|brown|salty",gpt-4o-mini-2024-07-18,205,29,234
+733aba5_3a3da05c-547f-4549,red wine vinegar,"acetic, tangy, fruity|heartburn, digestive, refreshing|cold|sharp, thin, acidic|disgust|red|sour",gpt-4o-mini-2024-07-18,202,30,232
+733aba5_8bd46255-1635-4df1,black tea,"astringent, malty, floral|relaxation, alertness, warmth|hot|smooth, medium, brisk|nostalgic|brown|bitter",gpt-4o-mini-2024-07-18,201,34,235
+733aba5_b47ce022-14e9-4dc6,chocolate rasberry protein mini proteinfx,"berry, chocolate, creaminess|energy boost, satisfaction, craving|warm|smooth, chewy, creamy|happiness|red|sweet",gpt-4o-mini-2024-07-18,207,28,235
+733aba5_4f89766f-0015-462e,carignane red wine,"berry, spice, oak|relaxation, warmth, alertness|warm|smooth, velvety, bold|nostalgic|purple|dry",gpt-4o-mini-2024-07-18,204,32,236
+733aba5_66bb262c-b662-466d,endive,"bitter, peppery, crunchy|digestive, refreshing, energizing|cold|crispy, crunchy, fibrous|surprise|green|bitter",gpt-4o-mini-2024-07-18,201,33,234
 ```
 
 ## 2. Metadatos y Embeddings (`data/docs`)
@@ -45,70 +63,79 @@ TBC
 Esta carpeta contiene la información semántica, descriptores de texto y los vectores (embeddings) pre-calculados utilizados por el sistema RAG y los modelos de evaluación.
 
 ### `audio_caps_embeddings.csv`
+
 Contiene los embeddings generados a partir de descripciones de audio (AudioCaps).
 
-| text | embedding |
-| :--- | :--- |
-| spooky sounds | `[Vector de Embedding (Float32) ...]` |
+| text              | embedding                             |
+| :---------------- | :------------------------------------ |
+| spooky sounds     | `[Vector de Embedding (Float32) ...]` |
 | scare as of agony | `[Vector de Embedding (Float32) ...]` |
 
 ### `descriptions.json`
+
 Base de conocimientos de descripciones musicales.
-* **Tipo:** Lista de objetos JSON.
-* **Contenido:** `id`, `instrument`, `description`.
+
+- **Tipo:** Lista de objetos JSON.
+- **Contenido:** `id`, `instrument`, `description`.
 
 Ejemplo:
-    {
-      "id": 1,
-      "instrument": "piano",
-      "description": "A sweet melancholic piano piece."
-    }
+{
+"id": 1,
+"instrument": "piano",
+"description": "A sweet melancholic piano piece."
+}
 
 ### `guedes_audio_embeddings.csv`
+
 Asocia embeddings de audio con perfiles de sabor (dulce, amargo, ácido, salado).
 
-| id | audio_embedding | sweet_rate | bitter_rate | sour_rate | salty_rate |
-|---:|:---|---:|---:|---:|---:|
-| 1 | `[Vector de Embedding ...]` | 0.46 | 0.2 | 0.11 | 0.23 |
-| 2 | `[Vector de Embedding ...]` | 0.48 | 0.3 | 0.9 | 0.13 |
+|  id | audio_embedding             | sweet_rate | bitter_rate | sour_rate | salty_rate |
+| --: | :-------------------------- | ---------: | ----------: | --------: | ---------: |
+|   1 | `[Vector de Embedding ...]` |       0.46 |         0.2 |      0.11 |       0.23 |
+|   2 | `[Vector de Embedding ...]` |       0.48 |         0.3 |       0.9 |       0.13 |
 
 ### `guedes_descriptor_dominance.csv`
+
 Matriz de dominancia de sabores por ID de pista, utilizada para validar la percepción sensorial.
 
-| id | sweet_rate | bitter_rate | sour_rate | salty_rate |
-|---:|---:|---:|---:|---:|
-| 1 | 0.46 | 0.2 | 0.11 | 0.23 |
+|  id | sweet_rate | bitter_rate | sour_rate | salty_rate |
+| --: | ---------: | ----------: | --------: | ---------: |
+|   1 |       0.46 |         0.2 |      0.11 |       0.23 |
 
 ### `rag_audio_embeddings.csv`
+
 Base de vectores utilizada por el sistema **RAG (Retrieval-Augmented Generation)** para buscar audios similares basados en el prompt del usuario.
 
-| audio_id | embedding |
-| :--- | :--- |
-| 1.wav | `[Vector de Embedding RAG ...]` |
-| 2.wav | `[Vector de Embedding RAG ...]` |
+| audio_id | embedding                       |
+| :------- | :------------------------------ |
+| 1.wav    | `[Vector de Embedding RAG ...]` |
+| 2.wav    | `[Vector de Embedding RAG ...]` |
 
 ### `rag_spanio_captions.csv`
+
 Relaciona las descripciones originales con los prompts enriquecidos y su distancia semántica.
 
-| id | source_caption | prompt | distance |
-|---:|:---|:---|---:|
-| 1 | sweet melancholic piano piece | arpeggiated sustain mellow piano... | 0.00027 |
+|  id | source_caption                | prompt                              | distance |
+| --: | :---------------------------- | :---------------------------------- | -------: |
+|   1 | sweet melancholic piano piece | arpeggiated sustain mellow piano... |  0.00027 |
 
 ### `spanio_captions.json`
+
 Diccionario de descripciones etiquetadas gramaticalmente (POS Tagging) para análisis lingüístico.
 
 Ejemplo:
-    "1": {
-        "sweet": "JJ",
-        "melancholic": "JJ",
-        "piano": "NN"
-    }
+"1": {
+"sweet": "JJ",
+"melancholic": "JJ",
+"piano": "NN"
+}
 
 ### `spanio_captions_embeddings.csv`
+
 Embeddings de texto de las descripciones del dataset Spanio.
 
-| text | embedding |
-| :--- | :--- |
+| text                          | embedding                   |
+| :---------------------------- | :-------------------------- |
 | sweet melancholic piano piece | `[Vector de Embedding ...]` |
 
 ---
@@ -116,13 +143,13 @@ Embeddings de texto de las descripciones del dataset Spanio.
 ## 3. Prompts (`data/prompts`)
 
 ### `spanio_prompts.csv`
+
 Contiene los prompts base utilizados para las pruebas de generación.
 
-| id | instrument        | description                        |
-|---:|:------------------|:-----------------------------------|
-|  1 | piano             | A sweet melancholic piano piece.   |
-|  2 | piano and strings | A bitter-sweet dreamy piano piece. |
-
+|  id | instrument        | description                        |
+| --: | :---------------- | :--------------------------------- |
+|   1 | piano             | A sweet melancholic piano piece.   |
+|   2 | piano and strings | A bitter-sweet dreamy piano piece. |
 
 ### User (Raw) Prompts
 
@@ -130,12 +157,11 @@ Este es el esquema de datos para los prompts usados en la ejecución y evaluaci�
 Estos datos se localizan en `raw/user/raw_prompts.csv`
 
 | Columna       | Descripción                                                                    |
-|:--------------|:-------------------------------------------------------------------------------|
+| :------------ | :----------------------------------------------------------------------------- |
 | **food_item** | Texto que caracteriza el alimento en el prompt del usuario.                    |
 | **taste**     | Texto que indica el gusto del alimento relacionado.                            |
 | **emotion**   | Texto que describe la emoción del usuario en la intención.                     |
 | **sentence**  | Texto (prompt) de usuario que referencia intención, lugar, emocion y alimento. |
-
 
 ```csv
 strawberry donut,sweet,disgust,I'm at the kitchen and I'm gonna eat a strawberry donut. The room is warm and the tiles look clean.
@@ -152,10 +178,10 @@ cinnamon roll,sweet,nostalgic,I'm at the restaurant and I'm gonna eat a cinnamon
 
 Esta carpeta almacena los resultados de los experimentos de evaluación automática utilizando la métrica **CLAP**. Los archivos representan diferentes configuraciones de pesos y fusión de modelos.
 
-### Estructura general de los archivos de resultados (`results_*.csv`):**
+### Estructura general de los archivos de resultados (`results_*.csv`):\*\*
 
 | Columna                  | Descripción                                                                         |
-|:-------------------------|:------------------------------------------------------------------------------------|
+| :----------------------- | :---------------------------------------------------------------------------------- |
 | **id**                   | Identificador único del experimento o track.                                        |
 | **instrument**           | Instrumento principal (si aplica).                                                  |
 | **taste**                | Sabor objetivo (sweet, sour, bitter, salty).                                        |
@@ -164,20 +190,19 @@ Esta carpeta almacena los resultados de los experimentos de evaluación automát
 | **clap_score**           | **Puntaje de similitud (CLAP)** entre el audio generado y el texto. Mayor es mejor. |
 
 **Archivos con anterior esquema de datos:**
-* `results_with_clap.csv`: Resultados generales.
-* `results_with_clap_base.csv`: Línea base de comparación.
-* `results_with_clap_base_prompts_*.csv`: Variaciones de experimentos habilitando/deshabilitando fusión de pesos en el modelo CLAP y MusicGen.
+
+- `results_with_clap.csv`: Resultados generales.
+- `results_with_clap_base.csv`: Línea base de comparación.
+- `results_with_clap_base_prompts_*.csv`: Variaciones de experimentos habilitando/deshabilitando fusión de pesos en el modelo CLAP y MusicGen.
 
 ### Estructura de archivos de evaluación de refinamiento de Prompts
 
-
-| Columna                  | Descripción                                                                         |
-|:-------------------------|:------------------------------------------------------------------------------------|
-| **id_prompt**            | Identificador único del prompt.                                                     |
-| **text**                 | Texto (prompt) de referencia para comparación.                                      |
-| **audio**                | Ruta relativa del archivo de audio generado a partir del texto                      |
-| **clap_score**           | **Puntaje de similitud (CLAP)** entre el audio generado y el texto. Mayor es mejor. |
-
+| Columna        | Descripción                                                                         |
+| :------------- | :---------------------------------------------------------------------------------- |
+| **id_prompt**  | Identificador único del prompt.                                                     |
+| **text**       | Texto (prompt) de referencia para comparación.                                      |
+| **audio**      | Ruta relativa del archivo de audio generado a partir del texto                      |
+| **clap_score** | **Puntaje de similitud (CLAP)** entre el audio generado y el texto. Mayor es mejor. |
 
 ```csv
 1,I'm at the park and I'm gonna eat a turkey sandwich. The air is cool and the grass looks bright green.,./audio_reprompt/data/tracks/raw_prompts_audios/1.wav,0.08358676731586456
@@ -190,6 +215,7 @@ Esta carpeta almacena los resultados de los experimentos de evaluación automát
 - `clap_score_results_prompt_outputs.csv`
 - `clap_score_results_reprompt_outputs.csv`
 - `clap_score_results_prompt_outputs_cross_validation.csv`
+
 ---
 
 ## 5. Almacenamiento de Audio (`data/tracks`)
@@ -198,7 +224,10 @@ Esta carpeta almacena los resultados de los experimentos de evaluación automát
 
 Aquí se organiza la salida de audio del sistema:
 
-* **📂 generated_base_music/**: Contiene audios de referencia base (línea base) generados sin técnicas de reprompting avanzado. (Ej. `sweet_01.wav`, `bitter_14.wav`).
-* **📂 generated_music/**: Contiene los audios finales generados por el sistema **Audio Reprompt** utilizando el pipeline completo (LLM + MusicGen).
-* **📂 guedes_music/**: Dataset de referencia proveniente de estudios previos (Guedes) usado para calibración.
-* **📂 rag_music/**: Fragmentos de audio recuperados por el sistema RAG para enriquecer el contexto (few-shot learning) del modelo de generación.
+- **📂 generated_base_music/**: Contiene audios de referencia base (línea base) generados sin técnicas de reprompting avanzado. (Ej. `sweet_01.wav`, `bitter_14.wav`).
+- **📂 generated_music/**: Contiene los audios finales generados por el sistema **Audio Reprompt** utilizando el pipeline completo (LLM + MusicGen).
+- **📂 guedes_music/**: Dataset de referencia proveniente de estudios previos (Guedes) usado para calibración.
+- **📂 rag_music/**: Fragmentos de audio recuperados por el sistema RAG para enriquecer el contexto (few-shot learning) del modelo de generación.
+- **📂 raw_prompts_audios/**: Fragmentos de audio obtenidos de la generación de audio con los prompts de usuarios (raw prompts).
+- **📂 reprompt_audios/**: Fragmentos de audio obtenidos de la generación de audio con los prompts refinados a partir de los prompts del usuario.
+- **📂 reprompt_audio_taste/**: Relacionan los mismos fragmentos de audio del directorio `reprompt_audios` pero organizados de acuerdo al gusto `bitter`, `salty`. `sour` y `sweet`.
