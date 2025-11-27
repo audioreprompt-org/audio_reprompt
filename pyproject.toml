@@ -8,10 +8,47 @@ dependencies = [
     "pandas>=2.3.3",
     "scikit-learn>=1.7.2",
     "transformers>=4.57.0",
+    "pyyaml>=6.0",
+    # PyTorch packages with platform-specific versions
+    "torch==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "torch>=2.8.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "torchaudio==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "torchaudio>=2.8.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "torchvision==0.17.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "torchvision>=0.23.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "laion-clap>=1.1.7",
+    "nltk>=3.9.2",
+    "psycopg[binary]>=3.2.11",
+    "notebook>=7.4.7",
+    "openai>=2.6.1",
+    "matplotlib>=3.10.7",
+    "seaborn>=0.13.2",
+    "sentence-transformers>=5.1.2",
+    "pandoc>=2.4",
+    "nbconvert>=7.16.6",
+    "wordcloud>=1.9.4",
+    "statsmodels>=0.14.5",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["config*", "models*", "app*"]
+exclude = ["tests*"]
+
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
 
 [dependency-groups]
 dev = [
+    "isort>=7.0.0",
+    "dvc[s3]>=3.63.0",
     "pytest>=8.4.2",
     "ruff>=0.14.0",
+    "matplotlib>=3.10.7",
 ]

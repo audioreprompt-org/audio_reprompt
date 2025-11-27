@@ -1,0 +1,63 @@
+# Audio Reprompt Configuration
+# This file contains configuration settings for the audio reprompt project
+
+# Data configuration
+data:
+  raw_data_path: "data/raw"
+  cleaned_data_path: "data/cleaned"
+  train_data_path: "data/train"
+  data_docs_path: "data/docs"
+  data_prompts_path: "data/prompts"
+  tracks_data_path: "data/tracks/generated_music"
+  tracks_base_data_path: "data/tracks/generated_base_music"
+  data_clap_path: "data/scores"
+  embeddings_csv_path: "data/embeddings"
+  reprompts_csv_path: "data/reprompt"
+  batch_size: 32
+  max_audio_length: 30 # seconds
+  sample_rate: 32000
+
+# Model configuration
+model:
+  name: "transformer-audio-model"
+  model_musicgen_path: "models/tasty-musicgen-small"
+  max_sequence_length: 512
+  hidden_size: 768
+  num_attention_heads: 12
+  num_hidden_layers: 6
+  dropout_rate: 0.1
+  learning_rate: 2e-5
+  warmup_steps: 1000
+  max_epochs: 10
+
+# Training configuration
+training:
+  seed: 42
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  checkpoint_dir: "models/checkpoints"
+  log_dir: "logs"
+  save_every_n_epochs: 2
+  early_stopping_patience: 3
+
+# Inference configuration
+inference:
+  output_dir: "outputs"
+  temperature: 0.7
+  top_k: 50
+  top_p: 0.9
+  max_new_tokens: 256
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/audio_reprompt.log"
+
+# Environment configuration
+environment:
+  device: "auto" # auto, cpu, cuda, mps
+  num_workers: 4
+  pin_memory: true
+  bucket_name: "audio-generations-audio-reprompt"

@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for the range input thumb (to match the mockup) */
+input[type="range"] {
+  --tw-ring-color: #a78bfa;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  /* Color del riel ajustado para un morado más oscuro y sutil */
+  background: #4f46e5; /* Usando main-blue para un color más brillante como en el mockup */
+  height: 8px;
+  border-radius: 4px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  /* Eliminado el borde blanco para que sea solo el color del anillo */
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #ffffff; /* El color del centro del pulgar */
+  cursor: pointer;
+  margin-top: -4px; /* Ajuste basado en la altura del riel */
+  /* Ajuste de la sombra para simular el anillo brillante */
+  box-shadow: 0 0 0 4px #7e22ce; /* Usando main-purple como anillo de sombra */
+}
+
+/* Custom styles for the blue scrollbar in the textarea */
+textarea {
+  scrollbar-color: #4f46e5 #0d011f; /* thumb color | track color */
+  scrollbar-width: thin;
+}
+
+/* Chrome, Edge, Safari */
+textarea::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+textarea::-webkit-scrollbar-thumb {
+  background-color: #4f46e5; /* main-blue para la flecha/pulgar */
+  border-radius: 4px;
+}
+textarea::-webkit-scrollbar-track {
+  background-color: #0d011f; /* dark-bg para el fondo de la pista */
+}
