@@ -28,7 +28,7 @@ services:
       # Mapea el puerto 8000 del contenedor al puerto 8000 del host (opcional, para depuración)
       - "8000:8000"
     environment:
-      - RUNPOD_API_ENDPOINT=${RUNPOD_API_ENDPOINT}
+      - RUNPOD_API_URL=${RUNPOD_API_URL}
       - RUNPOD_API_KEY=${RUNPOD_API_KEY}
       - MOCKED_RESPONSE=false
       # --- Database Configuration (Required for Reprompt) ---
