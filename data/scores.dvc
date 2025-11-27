@@ -1,0 +1,6 @@
+outs:
+- md5: a38bcafc2370841fcfc8a00fc2c15545.dir
+  nfiles: 22
+  hash: md5
+  path: scores
+  size: 310074

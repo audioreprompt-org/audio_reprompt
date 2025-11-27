@@ -1,0 +1,5 @@
+outs:
+- md5: d67d01f87c1f84a079d3c872ec0e4069.dir
+  nfiles: 9
+  hash: md5
+  path: docs

@@ -1,0 +1,29 @@
+[project]
+name = "audio-reprompt-model"
+version = "1.0.0"
+description = "Models + config subset for audio-reprompt"
+requires-python = ">=3.11"
+dependencies = [
+    "openai",
+    "psycopg[binary]",
+    "sentence-transformers",
+    "pyyaml",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = ".." }
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["models", "models.*", "config", "config.*"]
+exclude = [
+    "app*",
+    "tests*",
+    "models.musicgen*",
+    "models.clap_score*",
+    "models.food_prompts*",
+]
