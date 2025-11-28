@@ -16,7 +16,11 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: 432555842725.dkr.ecr.us-east-1.amazonaws.com/uniandes/tasty-frontend
+          image: 556905517430.dkr.ecr.us-east-1.amazonaws.com/uniandes/tasty-frontend
+          imagePullPolicy: Always
+          env:
+            - name: VITE_API_URL
+              value: "/api"
           ports:
             - containerPort: 80
           livenessProbe:

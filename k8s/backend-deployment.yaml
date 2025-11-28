@@ -16,33 +16,52 @@ spec:
     spec:
       containers:
         - name: backend
-          image: 432555842725.dkr.ecr.us-east-1.amazonaws.com/uniandes/tasty-backend
+          image: 556905517430.dkr.ecr.us-east-1.amazonaws.com/uniandes/tasty-backend
           ports:
             - containerPort: 8000
+          imagePullPolicy: Always
           env:
+            - name: RUNPOD_API_URL
+              value: "https://api.runpod.ai/v2/222ph97wou9n8a/runsync"
             - name: RUNPOD_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: audio-reprompt-secrets
                   key: runpod-api-key
+            - name: DB_HOST
+              value: "terraform-20251019003227121900000001.cfgxhuqcelyj.us-east-1.rds.amazonaws.com"
+            - name: DB_NAME
+              value: "audioreprompt"
+            - name: DB_USER
+              value: "audiouser"
             - name: MOCKED_RESPONSE
               value: "false"
+            - name: MOONSHOT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: audio-reprompt-secrets
+                  key: moonshot-api-key
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: audio-reprompt-secrets
+                  key: db-password
           livenessProbe:
             httpGet:
               path: /api/health
               port: 8000
             initialDelaySeconds: 5
-            periodSeconds: 10
+            periodSeconds: 60
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /api/health
               port: 8000
             initialDelaySeconds: 5
-            periodSeconds: 10
+            periodSeconds: 60
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 5
 ---
 apiVersion: v1
 kind: Service

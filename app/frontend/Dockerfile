@@ -11,7 +11,7 @@ COPY . .
 
 # Argumento para la URL de la API y variable de entorno
 # El backend correrá en http://backend:8000 dentro de la red Docker
-ARG VITE_API_URL=http://localhost:8000
+ARG VITE_API_URL="/api"
 ENV VITE_API_URL=$VITE_API_URL
 
 # Configuración de Tailwind CSS: asegúrate de que el CLI esté en el PATH
