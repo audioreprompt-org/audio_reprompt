@@ -6,8 +6,6 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-    alb.ingress.kubernetes.io/request-timeout: "600"
-    alb.ingress.kubernetes.io/idle-timeout: "600"
 spec:
   ingressClassName: nginx
   rules:
