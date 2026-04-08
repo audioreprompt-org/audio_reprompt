@@ -31,6 +31,8 @@ def mcu_reprompt(
     music_captions: str,
     model: str = KIMI_K2_THINKING_MODEL,
     prompt_version: str = "V3",
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> str:
     messages = [
         {"role": "system", "content": MUSIC_CURATOR_ROLE},
@@ -43,6 +45,12 @@ def mcu_reprompt(
         },
     ]
 
-    response = get_client(model).chat.completions.create(model=model, messages=messages)
+    kwargs: dict = {"model": model, "messages": messages}
+    if temperature is not None and "thinking" not in model:
+        kwargs["temperature"] = temperature
+    if top_p is not None and "thinking" not in model:
+        kwargs["top_p"] = top_p
+
+    response = get_client(model).chat.completions.create(**kwargs)
 
     return response.choices[0].message.content

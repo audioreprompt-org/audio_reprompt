@@ -28,7 +28,17 @@ REPROMPTS_PATH = PROJECT_ROOT / config.data.reprompts_csv_path
 clap_model = ClapModel(device="auto", enable_fusion=True)
 
 
-def generate_reprompts(model: str, prompt_version: str, limit: int = 100_000):
+def generate_reprompts(
+    model: str,
+    prompt_version: str,
+    limit: int = 100_000,
+    cut_results: bool = True,
+    k: int = 10,
+    filter_dimensions: tuple[str, ...] | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    tag: str = "",
+):
     with open(FOOD_PROMPTS_PATH, "r") as file_:
         reader = csv.DictReader(file_)
         prompts = [prompt["sentence"] for prompt in reader][:limit]
@@ -40,15 +50,25 @@ def generate_reprompts(model: str, prompt_version: str, limit: int = 100_000):
                 "id_prompt": pos,
                 "prompt": user_prompt,
                 "reprompt": transform(
-                    user_prompt, model=model, prompt_version=prompt_version
+                    user_prompt,
+                    model=model,
+                    prompt_version=prompt_version,
+                    cut_results=cut_results,
+                    k=k,
+                    filter_dimensions=filter_dimensions,
+                    temperature=temperature,
+                    top_p=top_p,
                 ),
             }
         )
 
-    pd.DataFrame(results).to_csv(
-        f"pipeline_results_{model.replace('-', '_')}_{len(prompts)}_prompt_{prompt_version}.csv",
-        index=False,
+    suffix = f"_{tag}" if tag else ""
+    output_path = (
+        f"{REPROMPTS_PATH}/pipeline_results_"
+        f"{model.replace('-', '_')}_{len(prompts)}_prompt_{prompt_version}{suffix}.csv"
     )
+    pd.DataFrame(results).to_csv(output_path, index=False)
+    return output_path
 
 
 def calculate_clap_score_alignment(
