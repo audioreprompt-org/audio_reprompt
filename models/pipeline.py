@@ -47,8 +47,9 @@ def transform(
     cut_results: bool = True,
     k: int = 10,
     filter_dimensions: tuple[str, ...] | None = FILTER_DIMENSIONS_DEFAULT,
-    temperature: float | None = None,
-    top_p: float | None = None,
+    system_prompt_modifier: str | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
 ):
     # 1. encode user prompt without preprocessing
     if not (
@@ -98,6 +99,7 @@ def transform(
         formatted_crossmodal_values,
         model=model,
         prompt_version=prompt_version,
-        temperature=temperature,
-        top_p=top_p,
+        system_prompt_modifier=system_prompt_modifier,
+        presence_penalty=presence_penalty,
+        frequency_penalty=frequency_penalty,
     )

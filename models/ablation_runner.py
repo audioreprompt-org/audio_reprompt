@@ -53,8 +53,9 @@ class AblationConfig:
     cut_results: bool = True
     k: int = 10
     filter_dimensions: tuple[str, ...] | None = FILTER_DIMENSIONS_DEFAULT
-    temperature: float | None = None
-    top_p: float | None = None
+    system_prompt_modifier: str | None = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
     requires_audio: bool = False
 
 
@@ -108,21 +109,21 @@ GENERATION_ABLATIONS: dict[str, AblationConfig] = {
         filter_dimensions=None,
         requires_audio=True,
     ),
-    # B3 — Sampling
+    # B3 — Nivel de Creatividad Inducida por Prompt y Penalizaciones
     "B3a": AblationConfig(
-        name="B3a — t=0.3 p=0.9", tag="B3a_t03_p09", temperature=0.3, top_p=0.9, requires_audio=True,
+        name="B3a — prompt determinista conservador", tag="B3a_prompt_determinista", system_prompt_modifier="Sé determinista y conservador", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
     ),
     "B3b": AblationConfig(
-        name="B3b — t=0.7 p=0.9", tag="B3b_t07_p09", temperature=0.7, top_p=0.9, requires_audio=True,
+        name="B3b — prompt default pen=0.0", tag="B3b_default_pen0", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
     ),
     "B3c": AblationConfig(
-        name="B3c — t=1.0 p=0.9", tag="B3c_t10_p09", temperature=1.0, top_p=0.9, requires_audio=True,
+        name="B3c — prompt creativo e imaginativo", tag="B3c_prompt_creativo", system_prompt_modifier="Sé altamente creativo e imaginativo", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
     ),
     "B3d": AblationConfig(
-        name="B3d — t=0.7 p=0.5", tag="B3d_t07_p05", temperature=0.7, top_p=0.5, requires_audio=True,
+        name="B3d — presence penalty 0.6", tag="B3d_presence_06", presence_penalty=0.6, requires_audio=True,
     ),
     "B3e": AblationConfig(
-        name="B3e — t=0.7 p=1.0", tag="B3e_t07_p10", temperature=0.7, top_p=1.0, requires_audio=True,
+        name="B3e — frequency penalty 0.6", tag="B3e_frequency_06", frequency_penalty=0.6, requires_audio=True,
     ),
 }
 
@@ -168,8 +169,9 @@ def run_reprompt(cfg: AblationConfig, sample_size: int, seed: int, run_id: str =
             cut_results=cfg.cut_results,
             k=cfg.k,
             filter_dimensions=cfg.filter_dimensions,
-            temperature=cfg.temperature,
-            top_p=cfg.top_p,
+            system_prompt_modifier=cfg.system_prompt_modifier,
+            presence_penalty=cfg.presence_penalty,
+            frequency_penalty=cfg.frequency_penalty,
             tag=run_tag,
             output_dir=str(ABLATIONS_REPROMPTS_PATH),
         )

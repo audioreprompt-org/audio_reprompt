@@ -26,8 +26,9 @@ def _cache_key(
     prompt_version: str,
     crossmodal_descriptors: str,
     music_captions: str,
-    temperature: float | None,
-    top_p: float | None,
+    system_prompt_modifier: str | None,
+    presence_penalty: float | None,
+    frequency_penalty: float | None,
 ) -> str:
     """Deterministic hash of all inputs that affect the LLM response."""
     payload = json.dumps(
@@ -36,8 +37,9 @@ def _cache_key(
             "prompt_version": prompt_version,
             "crossmodal_descriptors": crossmodal_descriptors,
             "music_captions": music_captions,
-            "temperature": temperature,
-            "top_p": top_p,
+            "system_prompt_modifier": system_prompt_modifier,
+            "presence_penalty": presence_penalty,
+            "frequency_penalty": frequency_penalty,
         },
         sort_keys=True,
     )
@@ -80,20 +82,25 @@ def mcu_reprompt(
     music_captions: str,
     model: str = KIMI_K2_THINKING_MODEL,
     prompt_version: str = "V3",
-    temperature: float | None = None,
-    top_p: float | None = None,
+    system_prompt_modifier: str | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
 ) -> str:
     # Check disk cache first
     key = _cache_key(
         model, prompt_version, crossmodal_descriptors, music_captions,
-        temperature, top_p,
+        system_prompt_modifier, presence_penalty, frequency_penalty
     )
     cached = _read_cache(key)
     if cached is not None:
         return cached
 
+    system_content = MUSIC_CURATOR_ROLE
+    if system_prompt_modifier:
+        system_content += f"\n{system_prompt_modifier}"
+
     messages = [
-        {"role": "system", "content": MUSIC_CURATOR_ROLE},
+        {"role": "system", "content": system_content},
         {
             "role": "user",
             "content": MCU_PROMPTS[prompt_version].format(
@@ -104,10 +111,10 @@ def mcu_reprompt(
     ]
 
     kwargs: dict = {"model": model, "messages": messages}
-    if temperature is not None and "thinking" not in model:
-        kwargs["temperature"] = temperature
-    if top_p is not None and "thinking" not in model:
-        kwargs["top_p"] = top_p
+    if presence_penalty is not None:
+        kwargs["presence_penalty"] = presence_penalty
+    if frequency_penalty is not None:
+        kwargs["frequency_penalty"] = frequency_penalty
 
     response = get_client(model).chat.completions.create(**kwargs)
     result = response.choices[0].message.content

@@ -64,8 +64,9 @@ def generate_reprompts(
     cut_results: bool = True,
     k: int = 10,
     filter_dimensions: tuple[str, ...] | None = None,
-    temperature: float | None = None,
-    top_p: float | None = None,
+    system_prompt_modifier: str | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
     tag: str = "",
     output_dir: str | None = None,
 ):
@@ -92,8 +93,9 @@ def generate_reprompts(
                     cut_results=cut_results,
                     k=k,
                     filter_dimensions=filter_dimensions,
-                    temperature=temperature,
-                    top_p=top_p,
+                    system_prompt_modifier=system_prompt_modifier,
+                    presence_penalty=presence_penalty,
+                    frequency_penalty=frequency_penalty,
                 ),
             }
         )
