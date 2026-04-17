@@ -3,9 +3,73 @@
 Cada experimento aísla una variable y se evalúa con **CLAP score** (coseno texto↔audio) usando `calculate_clap_score_alignment()` de `models/validate.py`.  
 Cada uno produce **tres** archivos de scores: reprompt↔audio, prompt-original↔audio y evaluación cruzada.
 
+## Muestreo Estratificado
+
+Todos los experimentos usan **muestreo estratificado por `taste`** (4 categorías: sweet, sour, salty, bitter).  
+Un `seed` fijo garantiza que todas las variantes de un mismo experimento usen **el mismo subset de prompts**.
+
+| Parámetro     | Default | Descripción |
+|---------------|---------|-------------|
+| `sample_size` | `30`    | Total de prompts (se divide entre categorías: 30 → 7 por taste = 28 efectivos) |
+| `seed`        | `42`    | Semilla para reproducibilidad |
+
+## Flujos de Ejecución
+
+### Retrieval (Componente A) — solo reprompts
+
+Las ablaciones de retrieval generan únicamente CSVs de reprompts para análisis textual (comparación entre modelos y configuraciones). **No requieren audio ni CLAP scoring.**
+
+```
+make ablation-A1                              → genera CSVs de reprompts
+make ablation-retrieval                       → ejecuta todos los A-series
+```
+
+### Generation (Componente B) — tres fases con Kaggle
+
+Las ablaciones de generación requieren GPU para TTS y se evalúan con CLAP scores:
+
+```
+Fase 1 (local):  make ablation-B1 PHASE=reprompt                              → genera CSVs
+Fase 2 (GPU):    make kaggle-run CSVS="data/ablations/reprompts/*_B1*.csv"     → audio en Kaggle
+Fase 3 (local):  make ablation-B1 PHASE=score                                 → CLAP scores
+```
+
+### Automatización Kaggle
+
+La Fase 2 está automatizada mediante `models/kaggle_runner.py`, que:
+
+1. **Sube** los CSVs de reprompts como un dataset Kaggle (`mfreyeso/ablation-reprompts`)
+2. **Genera y empuja** un notebook que ejecuta TTS en GPU con `csc-unipd/tasty-musicgen-small`
+3. **Monitorea** la ejecución del kernel cada 60s
+4. **Descarga** los archivos `.wav` a `data/ablations/audio/<csv_stem>/`
+
+#### Pre-requisitos Kaggle
+- Kaggle CLI instalado: `pip install kaggle`
+- Token en `~/.kaggle/kaggle.json` (Kaggle > Account > API > Create New API Token)
+
+#### Comandos
+```bash
+# Flujo completo (upload → poll → download)
+make kaggle-run CSVS="data/ablations/reprompts/*.csv"
+
+# Pasos individuales
+make kaggle-upload CSVS="data/ablations/reprompts/pipeline_results_*.csv"
+make kaggle-status
+make kaggle-download
+```
+
+### Scoreo manual de CSVs
+
+También se pueden puntuar CSVs directamente:
+```bash
+make ablation-score-csv CSV="data/ablations/reprompts/pipeline_results_*.csv"
+```
+
 ---
 
 ## Componente A — Etapa de Retrieval
+
+> Cada variante de retrieval se ejecuta con **ambos modelos** (`kimi-k2-thinking` y `gpt-5-nano`) para tener métricas comparativas.
 
 ### A1. Heurística de Corte (Cross-Modal)
 
@@ -13,24 +77,20 @@ Cada uno produce **tres** archivos de scores: reprompt↔audio, prompt-original�
 
 **Variable**: `cut_results` en `get_top_k_food_descriptors()` (`rag.py:43`).
 
-| Variante | `cut_results` |
-|----------|---------------|
-| A1-a     | `True` (actual) |
-| A1-b     | `False` |
+| Variante | `cut_results` | Modelos |
+|----------|---------------|---------|
+| A1-a     | `True` (actual) | kimi-k2, gpt-5-nano |
+| A1-b     | `False` | kimi-k2, gpt-5-nano |
 
 #### Pre-requisitos
 - PostgreSQL con tabla `crossmodal_food_embeddings` poblada.
 - Modelo `all-MiniLM-L6-v2` disponible.
-- API keys en `.env`: `MOONSHOT_API_KEY` / `OPENAI_API_KEY`.
+- API keys en `.env`: `MOONSHOT_API_KEY` y `OPENAI_API_KEY`.
 - Prompts en `data/raw/user/raw_prompts.csv`.
-- Audios generados en `data/tracks/reprompt_audios/` y `data/tracks/raw_prompts_audios/`.
-- Pesos del modelo CLAP descargados.
 
 #### Pasos
-1. Fijar `cut_results=True` en `pipeline.py:55` → `generate_reprompts(KIMI_K2_THINKING_MODEL, "V4")`.
-2. Ejecutar CLAP scoring (3 modos) sobre el CSV generado.
-3. Repetir con `cut_results=False`.
-4. Comparar scores medios/medianas entre A1-a y A1-b.
+1. `make ablation-A1` → genera reprompts con ambos modelos. Se asigna un `run_id` automático.
+2. Comparar los CSVs generados entre A1-a y A1-b, por modelo (métricas textuales).
 
 ---
 
@@ -40,21 +100,19 @@ Cada uno produce **tres** archivos de scores: reprompt↔audio, prompt-original�
 
 **Variable**: `k` en `get_top_k_audio_captions()` (`pipeline.py:75`).
 
-| Variante | `k` |
-|----------|-----|
-| A2-a     | `5` |
-| A2-b     | `10` (actual) |
-| A2-c     | `20` |
+| Variante | `k` | Modelos |
+|----------|-----|---------|
+| A2-a     | `5` | kimi-k2, gpt-5-nano |
+| A2-b     | `10` (actual) | kimi-k2, gpt-5-nano |
+| A2-c     | `50` | kimi-k2, gpt-5-nano |
 
 #### Pre-requisitos
 - Mismos que A1.
 - Tabla `audio_descriptors` poblada en PostgreSQL.
 
 #### Pasos
-1. Modificar `k` en `pipeline.py:75` → generar reprompts.
-2. Renombrar CSV de salida incluyendo el valor de `k`.
-3. Ejecutar CLAP scoring (3 modos).
-4. Repetir para cada valor de `k` y comparar distribuciones.
+1. `make ablation-A2`
+2. Comparar distribuciones de reprompts entre k=5, k=10, k=50, por modelo.
 
 ---
 
@@ -64,25 +122,24 @@ Cada uno produce **tres** archivos de scores: reprompt↔audio, prompt-original�
 
 **Variable**: Filtro de dimensiones en `pipeline.py:30-34`.
 
-| Variante | Filtro |
-|----------|--------|
-| A3-a     | Solo `emotion`, `taste`, `texture` (actual) |
-| A3-b     | Todas las dimensiones (sin filtro) |
+| Variante | Filtro | Modelos |
+|----------|--------|---------|
+| A3-a     | Solo `emotion`, `taste`, `texture` (actual) | kimi-k2, gpt-5-nano |
+| A3-b     | Todas las dimensiones (sin filtro) | kimi-k2, gpt-5-nano |
 
 #### Pre-requisitos
 - Mismos que A1.
 
 #### Pasos
-1. **A3-a**: ejecutar con filtro actual.
-2. **A3-b**: remover condición `if` en línea 33, generar reprompts.
-3. Ejecutar CLAP scoring (3 modos) para ambas variantes y comparar.
+1. `make ablation-A3`
+2. Comparar reprompts entre A3-a y A3-b, por modelo (métricas textuales).
 
 ---
 
 ## Componente B — Etapa de Generación (MCU Re-Prompt)
 
 Manejada por `mcu_reprompt()` en `models/music_curator/kimi_mcu.py`.  
-Parámetros clave: versión de prompt, modelo LLM y parámetros de sampling.
+El modelo a usar se decide a partir de los resultados de las ablaciones de retrieval (Componente A).
 
 ---
 
@@ -104,31 +161,51 @@ Parámetros clave: versión de prompt, modelo LLM y parámetros de sampling.
 - Las 4 versiones definidas en `models/music_curator/prompts.py`.
 
 #### Pasos
-1. Ejecutar `generate_reprompts(KIMI_K2_THINKING_MODEL, "<VERSION>")` para V1–V4.
-2. CLAP scoring (3 modos) por cada CSV.
-3. Comparar scores entre versiones.
+
+**Opción A — Pipeline completo (un solo comando):**
+```bash
+make ablation-B1-full
+# Ejecuta: reprompt → Kaggle GPU → CLAP score → análisis estadístico
+# El run_id se genera automáticamente
+```
+
+**Opción B — Fases individuales:**
+1. `make ablation-B1 PHASE=reprompt` → genera CSVs (imprime el `run_id`)
+2. `make kaggle-run CSVS="data/ablations/reprompts/*_B1*_R<run_id>.csv"`
+3. `make ablation-B1 PHASE=score --run-id R<run_id>`
+4. `make ablation-analysis EXPERIMENT=B1 RUN=R<run_id>`
 
 ---
 
-### B2. Modelo LLM
+### B2. Filtro de Dimensiones (Impacto en Audio)
 
-**Objetivo**: Medir cómo la elección de LLM impacta la calidad del re-prompt.
+**Objetivo**: Evaluar cómo el filtro de dimensiones en los descriptores crossmodal afecta la calidad del audio generado. Complementa A3 (que evalúa a nivel textual) con evaluación CLAP texto↔audio.
 
-**Variable**: `model` en `transform()` / `mcu_reprompt()`.
+**Variable**: `filter_dimensions` en `format_crossmodal_descriptors()` (`pipeline.py:30-34`).
 
-| Variante | Modelo |
-|----------|--------|
-| B2-a     | `kimi-k2-thinking-turbo` (Moonshot API) |
-| B2-b     | `gpt-5-nano` (OpenAI API) |
+| Variante | Filtro | Diferencia con A3 |
+|----------|--------|--------------------|
+| B2-a     | Solo `emotion`, `taste`, `texture` (actual) | Evaluado con CLAP score |
+| B2-b     | Todas las dimensiones (sin filtro) | Evaluado con CLAP score |
+
+> [!NOTE]
+> A3 evalúa el mismo parámetro a nivel textual (comparación de reprompts). B2 evalúa su impacto en la calidad del **audio generado** mediante CLAP scores.
 
 #### Pre-requisitos
 - Mismos que A1.
-- **Ambas** API keys configuradas: `MOONSHOT_API_KEY` y `OPENAI_API_KEY`.
 
 #### Pasos
-1. Fijar prompt version (usar mejor de B1 o `V4`).
-2. Ejecutar `generate_reprompts(<MODELO>, "V4")` para cada modelo.
-3. CLAP scoring (3 modos) y comparar scores, latencia y costo.
+
+**Opción A — Pipeline completo:**
+```bash
+make ablation-B2-full
+```
+
+**Opción B — Fases individuales:**
+1. `make ablation-B2 PHASE=reprompt`
+2. `make kaggle-run CSVS="data/ablations/reprompts/*_B2*_R<run_id>.csv"`
+3. `make ablation-B2 PHASE=score --run-id R<run_id>`
+4. `make ablation-analysis EXPERIMENT=B2 RUN=R<run_id>`
 
 ---
 
@@ -147,48 +224,124 @@ Parámetros clave: versión de prompt, modelo LLM y parámetros de sampling.
 | B3-e     | `0.7`      | `1.0` | Nucleus completo |
 
 > [!IMPORTANT]
-> `kimi_mcu.py:46` actualmente **no pasa** `temperature` ni `top_p` al API.
-> Se requiere modificar `mcu_reprompt()` antes de ejecutar esta ablación.
+> Los parámetros `temperature`/`top_p` se ignoran automáticamente para modelos con `"thinking"` en su nombre.
+> B3 solo tiene efecto con `gpt-5-nano`.
 
 #### Pre-requisitos
 - Mismos que A1.
-- **Cambio de código requerido**: agregar `temperature` y `top_p` a la firma de `mcu_reprompt()` y propagarlos por `transform()` y `generate_reprompts()`:
-  ```python
-  def mcu_reprompt(..., temperature: float = 0.7, top_p: float = 0.9) -> str:
-      response = get_client(model).chat.completions.create(
-          model=model, messages=messages, temperature=temperature, top_p=top_p,
-      )
-  ```
 
 #### Pasos
-1. Aplicar cambio de código descrito arriba.
-2. Generar reprompts para cada combinación (temperatura, top_p).
-3. CLAP scoring (3 modos) y comparar distribuciones + inspección cualitativa.
+
+**Opción A — Pipeline completo:**
+```bash
+make ablation-B3-full
+```
+
+**Opción B — Fases individuales:**
+1. `make ablation-B3 PHASE=reprompt`
+2. `make kaggle-run CSVS="data/ablations/reprompts/*_B3*_R<run_id>.csv"`
+3. `make ablation-B3 PHASE=score --run-id R<run_id>`
+4. `make ablation-analysis EXPERIMENT=B3 RUN=R<run_id>`
 
 ---
 
 ## Orden de Ejecución
 
 ```
-Fase 1 — Retrieval
+Fase 1 — Retrieval (cada variante × 2 modelos, solo reprompts)
   A1 (heurística de corte) → A3 (filtro de dimensiones) → A2 (top-k)
 
-Fase 2 — Generación (usar mejor config de Fase 1)
-  B1 (versión de prompt) → B2 (modelo) → B3 (sampling)
+Fase 2 — Generación (usar mejor config y modelo de Fase 1)
+  B1 (versión de prompt) → B2 (filtro de dimensiones → audio) → B3 (sampling)
 ```
 
-## Registro de Resultados
+## Inputs del Análisis Estadístico
 
-| Experimento | Variante | CLAP (reprompt↔audio) | CLAP (raw↔audio) | CLAP (cruzada) | Notas |
-|-------------|----------|----------------------|-------------------|----------------|-------|
-| A1          | A1-a     |                      |                   |                |       |
-| A1          | A1-b     |                      |                   |                |       |
-| ...         | ...      |                      |                   |                |       |
+El análisis (`ablation_analysis.py`) consume datos de **dos fuentes**, filtrados por `run_id`:
+
+| Input | Ubicación | Datos que aporta |
+|-------|-----------|------------------|
+| Score CSVs | `data/ablations/scores/` | CLAP scores (reprompt↔audio, raw↔audio, cruzada) |
+| Reprompt CSVs | `data/ablations/reprompts/` | Columna `taste` para desglose por categoría |
+
+El análisis genera:
+- Estadísticas descriptivas y t-test pareado (raw vs reprompt)
+- Cohen's d (tamaño del efecto)
+- Desglose por categoría de taste
+- Correlación Kendall τ
+- Plots de distribución y comparación
+- Reporte `hallazgos_<grupo>.md` en español
+
+## Comandos Make
+
+```bash
+# Listar experimentos disponibles
+make ablation-list
+
+# ── Retrieval (solo reprompts, sin PHASE) ──
+make ablation-A1
+make ablation-retrieval           # ejecuta A1 + A2 + A3
+
+# ── Generation: pipeline completo (un solo comando) ──
+make ablation-B2-full             # reprompt → Kaggle GPU → score → análisis
+make ablation-B1-full
+make ablation-B3-full
+
+# ── Generation: fases individuales ──
+make ablation-B2 PHASE=reprompt   # solo genera CSVs (con run ID auto)
+make kaggle-run CSVS="data/ablations/reprompts/*_B2*.csv"  # Kaggle
+make ablation-B2 PHASE=score --run-id R20260416_194531     # score con run específico
+make ablation-analysis EXPERIMENT=B2 RUN=R20260416_194531  # análisis de un run
+
+# Listar runs disponibles para análisis
+make ablation-analysis-list
+
+# Puntuar CSVs existentes directamente
+make ablation-score-csv CSV="data/ablations/reprompts/mi_archivo.csv"
+```
+
+## Run ID
+
+Cada ejecución genera un **Run ID** automático con formato `RYYYYMMDD_HHMMSS` (ej: `R20260416_194531`).
+Este ID se incluye en todos los nombres de archivo, lo que permite:
+- Ejecutar el mismo experimento múltiples veces sin colisiones
+- Analizar un run específico con `--run R20260416_194531`
+- Listar runs disponibles con `make ablation-analysis-list`
+
+## Estructura de Archivos
+
+```
+data/ablations/
+├── reprompts/       # CSVs generados (Fase 1: reprompt)
+│   ├── pipeline_results_*_B2a_filter_default_R20260416_194531.csv
+│   ├── pipeline_results_*_B2b_nofilter_R20260416_194531.csv
+│   └── ...
+├── audio/           # WAVs descargados de Kaggle (Fase 2)
+│   ├── pipeline_results_*_B2a_filter_default_R20260416_194531/
+│   │   ├── 24.wav
+│   │   └── ...
+│   └── pipeline_results_*_B2b_nofilter_R20260416_194531/
+│       └── ...
+├── scores/          # CLAP scores (Fase 3)
+│   ├── clap_score_results_reprompt_outputs_*_R20260416_194531.csv
+│   ├── clap_score_results_prompt_outputs_*_R20260416_194531_raw.csv
+│   └── clap_score_results_prompt_outputs_*_R20260416_194531_cross.csv
+├── analysis/        # Reportes estadísticos (Fase 4)
+│   └── B2_R20260416_194531/
+│       ├── hallazgos_B2.md
+│       ├── summary_B2.csv
+│       ├── comparison_B2.png
+│       └── *.png
+├── archive/         # Resultados anteriores archivados
+│   └── ...
+└── .cache/          # Cache de respuestas LLM (no versionado)
+```
 
 ## Convención de Nombres
 
 ```
-pipeline_results_<modelo>_<N>_prompt_<version>_<id_experimento>.csv
+pipeline_results_<modelo>_<N>_prompt_<version>_<tag>_<run_id>.csv
 ```
 
-Ejemplo: `pipeline_results_kimi_k2_thinking_turbo_80_prompt_V4_A2c_k20.csv`
+Ejemplo: `pipeline_results_kimi_k2_thinking_28_prompt_V4_B2a_filter_default_R20260416_194531.csv`
+

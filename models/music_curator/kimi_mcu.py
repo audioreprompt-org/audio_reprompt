@@ -1,17 +1,63 @@
+import hashlib
+import json
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from openai import OpenAI
 
 from models.music_curator.prompts import MCU_PROMPTS
 
-KIMI_K2_THINKING_MODEL = "kimi-k2-thinking-turbo"
+KIMI_K2_THINKING_MODEL = "kimi-k2-thinking"
 OPENAI_GPT_5_NANO_MODEL = "gpt-5-nano"
 
 
 MUSIC_CURATOR_ROLE = """
 You are MCU, an AI music curator assistant that provide recommendations using musician vocabulary.
 """
+
+# ── Response cache ───────────────────────────────────────────
+
+_CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "ablations" / ".cache"
+
+
+def _cache_key(
+    model: str,
+    prompt_version: str,
+    crossmodal_descriptors: str,
+    music_captions: str,
+    temperature: float | None,
+    top_p: float | None,
+) -> str:
+    """Deterministic hash of all inputs that affect the LLM response."""
+    payload = json.dumps(
+        {
+            "model": model,
+            "prompt_version": prompt_version,
+            "crossmodal_descriptors": crossmodal_descriptors,
+            "music_captions": music_captions,
+            "temperature": temperature,
+            "top_p": top_p,
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _read_cache(key: str) -> str | None:
+    cache_file = _CACHE_DIR / f"{key}.txt"
+    if cache_file.exists():
+        return cache_file.read_text(encoding="utf-8")
+    return None
+
+
+def _write_cache(key: str, response: str) -> None:
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_file = _CACHE_DIR / f"{key}.txt"
+    cache_file.write_text(response, encoding="utf-8")
+
+
+# ── Client ───────────────────────────────────────────────────
 
 
 @lru_cache(maxsize=2)
@@ -26,6 +72,9 @@ def get_client(model: str):
     )
 
 
+# ── Reprompt ─────────────────────────────────────────────────
+
+
 def mcu_reprompt(
     crossmodal_descriptors: str,
     music_captions: str,
@@ -34,6 +83,15 @@ def mcu_reprompt(
     temperature: float | None = None,
     top_p: float | None = None,
 ) -> str:
+    # Check disk cache first
+    key = _cache_key(
+        model, prompt_version, crossmodal_descriptors, music_captions,
+        temperature, top_p,
+    )
+    cached = _read_cache(key)
+    if cached is not None:
+        return cached
+
     messages = [
         {"role": "system", "content": MUSIC_CURATOR_ROLE},
         {
@@ -52,5 +110,7 @@ def mcu_reprompt(
         kwargs["top_p"] = top_p
 
     response = get_client(model).chat.completions.create(**kwargs)
+    result = response.choices[0].message.content
 
-    return response.choices[0].message.content
+    _write_cache(key, result)
+    return result
