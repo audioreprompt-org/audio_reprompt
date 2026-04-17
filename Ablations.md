@@ -1,7 +1,29 @@
 # Experimentos de Ablación
 
+## Índice
+- [Muestreo Estratificado](#muestreo-estratificado)
+- [Flujos de Ejecución](#flujos-de-ejecución)
+  - [Recuperación (Componente A) — solo reprompts](#recuperación-componente-a--solo-reprompts)
+  - [Generación (Componente B) — tres fases con Kaggle](#generación-componente-b--tres-fases-con-kaggle)
+  - [Automatización Kaggle](#automatización-kaggle)
+  - [Evaluación manual de archivos CSV](#evaluación-manual-de-archivos-csv)
+- [Componente A — Etapa de Recuperación](#componente-a--etapa-de-recuperación)
+  - [A1. Heurística de Corte (Cross-Modal)](#a1-heurística-de-corte-cross-modal)
+  - [A2. Top-K de Captions de Audio](#a2-top-k-de-captions-de-audio)
+  - [A3. Filtro de Dimensiones en Descriptores](#a3-filtro-de-dimensiones-en-descriptores)
+- [Componente B — Etapa de Generación (MCU Re-Prompt)](#componente-b--etapa-de-generación-mcu-re-prompt)
+  - [B1. Versión de Prompt](#b1-versión-de-prompt)
+  - [B2. Filtro de Dimensiones (Impacto en Audio)](#b2-filtro-de-dimensiones-impacto-en-audio)
+  - [B3. Parámetros de Modelo (Penalizaciones y Creatividad)](#b3-parámetros-de-modelo-penalizaciones-y-creatividad)
+- [Orden de Ejecución](#orden-de-ejecución)
+- [Inputs del Análisis Estadístico](#inputs-del-análisis-estadístico)
+- [Comandos Make](#comandos-make)
+- [Run ID](#run-id)
+- [Estructura de Archivos](#estructura-de-archivos)
+- [Convención de Nombres](#convención-de-nombres)
+
 Cada experimento aísla una variable y se evalúa con **CLAP score** (coseno texto↔audio) usando `calculate_clap_score_alignment()` de `models/validate.py`.  
-Cada uno produce **tres** archivos de scores: reprompt↔audio, prompt-original↔audio y evaluación cruzada.
+Cada uno produce **tres** archivos con cálculos de score: reprompt↔audio, prompt-original↔audio y evaluación cruzada.
 
 ## Muestreo Estratificado
 
@@ -15,23 +37,23 @@ Un `seed` fijo garantiza que todas las variantes de un mismo experimento usen **
 
 ## Flujos de Ejecución
 
-### Retrieval (Componente A) — solo reprompts
+### Recuperación (Componente A) — solo reprompts
 
-Las ablaciones de retrieval generan únicamente CSVs de reprompts para análisis textual (comparación entre modelos y configuraciones). **No requieren audio ni CLAP scoring.**
+Las ablaciones de recuperación generan únicamente archivos CSV de reprompts para análisis textual (comparación entre modelos y configuraciones). **No requieren audio ni cálculo de CLAP score.**
 
 ```
 make ablation-A1                              → genera CSVs de reprompts
 make ablation-retrieval                       → ejecuta todos los A-series
 ```
 
-### Generation (Componente B) — tres fases con Kaggle
+### Generación (Componente B) — tres fases con Kaggle
 
 Las ablaciones de generación requieren GPU para TTS y se evalúan con CLAP scores:
 
 ```
 Fase 1 (local):  make ablation-B1 PHASE=reprompt                              → genera CSVs
 Fase 2 (GPU):    make kaggle-run CSVS="data/ablations/reprompts/*_B1*.csv"     → audio en Kaggle
-Fase 3 (local):  make ablation-B1 PHASE=score                                 → CLAP scores
+Fase 3 (local):  make ablation-B1 PHASE=score                                 → cálculo de CLAP scores
 ```
 
 ### Automatización Kaggle
@@ -58,18 +80,18 @@ make kaggle-status
 make kaggle-download
 ```
 
-### Scoreo manual de CSVs
+### Evaluación manual de CSVs
 
-También se pueden puntuar CSVs directamente:
+También se pueden puntuar archivos CSV directamente:
 ```bash
 make ablation-score-csv CSV="data/ablations/reprompts/pipeline_results_*.csv"
 ```
 
 ---
 
-## Componente A — Etapa de Retrieval
+## Componente A — Etapa de Recuperación
 
-> Cada variante de retrieval se ejecuta con **ambos modelos** (`kimi-k2-thinking` y `gpt-5-nano`) para tener métricas comparativas.
+> Cada variante de recuperación se ejecuta con **ambos modelos** (`kimi-k2-thinking` y `gpt-5-nano`) para tener métricas comparativas.
 
 ### A1. Heurística de Corte (Cross-Modal)
 
@@ -139,7 +161,7 @@ make ablation-score-csv CSV="data/ablations/reprompts/pipeline_results_*.csv"
 ## Componente B — Etapa de Generación (MCU Re-Prompt)
 
 Manejada por `mcu_reprompt()` en `models/music_curator/kimi_mcu.py`.  
-El modelo a usar se decide a partir de los resultados de las ablaciones de retrieval (Componente A).
+El modelo a usar se decide a partir de los resultados de las ablaciones de recuperación (Componente A).
 
 ---
 
@@ -209,23 +231,22 @@ make ablation-B2-full
 
 ---
 
-### B3. Parámetros de Sampling (Temperature & top_p)
+### B3. Parámetros de Modelo (Penalizaciones y Creatividad)
 
-**Objetivo**: Encontrar la combinación que maximice alineación sin sacrificar diversidad.
+**Objetivo**: Encontrar la configuración que maximice la alineación sin sacrificar diversidad, ajustada para modelos avanzados que omiten temperature/top_p de forma predeterminada, como `kimi-k2-thinking`.
 
-**Variable**: `temperature` y `top_p` en la llamada a chat completions.
+**Variable**: Nivel de creatividad en instrucciones de prompt y variaciones en parámetros de penalización (`presence_penalty` / `frequency_penalty`).
 
-| Variante | Temperature | top_p | Comportamiento esperado |
-|----------|------------|-------|-------------------------|
-| B3-a     | `0.3`      | `0.9` | Conservador, consistente |
-| B3-b     | `0.7`      | `0.9` | Balanceado (default `config.yaml`) |
-| B3-c     | `1.0`      | `0.9` | Creativo, más diverso |
-| B3-d     | `0.7`      | `0.5` | Nucleus más estrecho |
-| B3-e     | `0.7`      | `1.0` | Nucleus completo |
+| Variante | Instrucción de Prompt (System) | Penalizaciones (presence/frequency) | Comportamiento esperado |
+|----------|--------------------------------|-------------------------------------|-------------------------|
+| B3-a     | "Sé determinista y conservador" | `0.0`, `0.0` | Conservador, limitando la entropía |
+| B3-b     | *(Default)* | `0.0`, `0.0` | Balanceado (default `config.yaml`) |
+| B3-c     | "Sé altamente creativo e imaginativo" | `0.0`, `0.0` | Creativo, mayor riqueza de vocabulario |
+| B3-d     | *(Default)* | `0.6` (presence) | Promueve la introducción de nuevos términos |
+| B3-e     | *(Default)* | `0.6` (frequency) | Reduce el uso reiterativo de mismos descriptores |
 
 > [!IMPORTANT]
-> Los parámetros `temperature`/`top_p` se ignoran automáticamente para modelos con `"thinking"` en su nombre.
-> B3 solo tiene efecto con `gpt-5-nano`.
+> Dado que hiperparámetros como `temperature`/`top_p` a menudo son ignorados en los modelos de estilo "reasoning/thinking" (como `kimi-k2-thinking`), la ablación B3 ahora explora vías alternativas (prompt engineering explícito y parámetros de penalización en la API) para medir su impacto riguroso en la generación del reprompt sin requerir `gpt-5-nano`.
 
 #### Pre-requisitos
 - Mismos que A1.
@@ -248,11 +269,11 @@ make ablation-B3-full
 ## Orden de Ejecución
 
 ```
-Fase 1 — Retrieval (cada variante × 2 modelos, solo reprompts)
+Fase 1 — Recuperación (cada variante × 2 modelos, solo reprompts)
   A1 (heurística de corte) → A3 (filtro de dimensiones) → A2 (top-k)
 
 Fase 2 — Generación (usar mejor config y modelo de Fase 1)
-  B1 (versión de prompt) → B2 (filtro de dimensiones → audio) → B3 (sampling)
+  B1 (versión de prompt) → B2 (filtro de dimensiones → audio) → B3 (penalizaciones y creatividad)
 ```
 
 ## Inputs del Análisis Estadístico
@@ -261,8 +282,8 @@ El análisis (`ablation_analysis.py`) consume datos de **dos fuentes**, filtrado
 
 | Input | Ubicación | Datos que aporta |
 |-------|-----------|------------------|
-| Score CSVs | `data/ablations/scores/` | CLAP scores (reprompt↔audio, raw↔audio, cruzada) |
-| Reprompt CSVs | `data/ablations/reprompts/` | Columna `taste` para desglose por categoría |
+| Evaluación CSVs | `data/ablations/scores/` | CLAP scores (reprompt↔audio, original↔audio, evaluación cruzada) |
+| Reprompt CSVs | `data/ablations/reprompts/` | Columna `taste` para desglose por categoría (sabor) |
 
 El análisis genera:
 - Estadísticas descriptivas y t-test pareado (raw vs reprompt)
@@ -278,17 +299,17 @@ El análisis genera:
 # Listar experimentos disponibles
 make ablation-list
 
-# ── Retrieval (solo reprompts, sin PHASE) ──
+# ── Recuperación (solo reprompts, sin PHASE) ──
 make ablation-A1
 make ablation-retrieval           # ejecuta A1 + A2 + A3
 
-# ── Generation: pipeline completo (un solo comando) ──
-make ablation-B2-full             # reprompt → Kaggle GPU → score → análisis
+# ── Generación: pipeline completo (un solo comando) ──
+make ablation-B2-full             # reprompt → Kaggle GPU → cálculo de score → análisis
 make ablation-B1-full
 make ablation-B3-full
 
-# ── Generation: fases individuales ──
-make ablation-B2 PHASE=reprompt   # solo genera CSVs (con run ID auto)
+# ── Generación: fases individuales ──
+make ablation-B2 PHASE=reprompt   # solo genera CSVs (con run ID automático)
 make kaggle-run CSVS="data/ablations/reprompts/*_B2*.csv"  # Kaggle
 make ablation-B2 PHASE=score --run-id R20260416_194531     # score con run específico
 make ablation-analysis EXPERIMENT=B2 RUN=R20260416_194531  # análisis de un run
