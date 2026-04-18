@@ -28,6 +28,7 @@ dependencies = [
     "nbconvert>=7.16.6",
     "wordcloud>=1.9.4",
     "statsmodels>=0.14.5",
+    "textstat>=0.7.13",
 ]
 
 [build-system]

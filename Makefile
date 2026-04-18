@@ -23,7 +23,7 @@ build-reprompt:
 	@rm -rf ./models/build ./models/dist ./*.egg-info
 
 # ── Ablation experiments ──────────────────────────────────────
-ABLATION_CMD = uv run --env-file .env-example python -m models.ablation_runner
+ABLATION_CMD = uv run --env-file .env python -m models.ablation_runner
 SAMPLE_SIZE ?= 30
 SEED ?= 42
 PHASE ?= all
@@ -37,6 +37,10 @@ ablation-list:
 # Calcular CLAP scores para CSVs existentes (uso: make ablation-score-csv CSV="path1.csv path2.csv")
 ablation-score-csv:
 	$(ABLATION_CMD) --phase score --reprompt-csv $(CSV)
+
+# Calcular métricas NLP para CSVs existentes de retrieval (uso: make ablation-nlp-csv CSV="path1.csv path2.csv")
+ablation-nlp-csv:
+	$(ABLATION_CMD) --phase nlp --reprompt-csv $(CSV)
 
 # ── Retrieval (solo reprompts — métricas textuales, ambos modelos) ─
 ablation-A1a:

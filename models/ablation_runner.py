@@ -263,11 +263,25 @@ def run_ablation(cfg: AblationConfig, sample_size: int, seed: int, phase: str, r
             return
         # phase == "all" → just run reprompt
         print(f"  ℹ '{cfg.name}' es retrieval — ejecutando solo reprompts.")
+    elif phase == "nlp":
+        effective_phase = "score" # Lo usamos como alias para recolectar CSVs
     else:
         effective_phase = phase
 
     if effective_phase in ("reprompt", "all"):
         csvs = run_reprompt(cfg, sample_size, seed, run_id)
+        if not cfg.requires_audio or phase == "nlp":
+            print(f"\n{'═' * 60}")
+            print(f"  FASE NLP: Evaluando métricas ligeras")
+            print(f"{'═' * 60}")
+            try:
+                from models.scripts.eval_reprompt_nlp import evaluate_csv
+                from models.validate import ABLATIONS_PATH
+                out_dir = str(ABLATIONS_PATH / "analysis" / f"A_{run_id}")
+                for csv_path in csvs:
+                    evaluate_csv(csv_path, output_dir=out_dir)
+            except ImportError as e:
+                print(f"  ⚠ Faltan dependencias (textstat, nltk, sentence-transformers) para evaluar NLP: {e}", file=sys.stderr)
 
     if effective_phase == "score":
         # find previously generated CSVs for this experiment
@@ -287,8 +301,20 @@ def run_ablation(cfg: AblationConfig, sample_size: int, seed: int, phase: str, r
             print("  Error: no hay CSVs de reprompts para calcular scores.", file=sys.stderr)
             return
 
-    if effective_phase in ("score", "all"):
+    if effective_phase in ("score", "all") and phase != "nlp":
         run_score(csvs, audio_dir=str(ABLATIONS_AUDIO_PATH))
+    elif phase == "nlp":
+        print(f"\n{'═' * 60}")
+        print(f"  FASE NLP: Evaluando métricas ligeras")
+        print(f"{'═' * 60}")
+        try:
+            from models.scripts.eval_reprompt_nlp import evaluate_csv
+            from models.validate import ABLATIONS_PATH
+            out_dir = str(ABLATIONS_PATH / "analysis" / f"A_{run_id}")
+            for csv_path in csvs:
+                evaluate_csv(csv_path, output_dir=out_dir)
+        except ImportError as e:
+            print(f"  ⚠ Faltan dependencias (textstat, nltk, sentence-transformers) para evaluar NLP: {e}", file=sys.stderr)
 
 
 def run_full_pipeline(
@@ -388,12 +414,12 @@ def main():
     )
     parser.add_argument(
         "--phase",
-        choices=["reprompt", "score", "all", "full"],
+        choices=["reprompt", "score", "nlp", "all", "full"],
         default="all",
         help=(
             "Fase a ejecutar: reprompt (solo genera), score (solo CLAP), "
-            "all (reprompt+score sin Kaggle), full (reprompt+Kaggle+score+análisis). "
-            "Default: all"
+            "nlp (métricas ligeras), all (reprompt+score sin Kaggle), "
+            "full (reprompt+Kaggle+score+análisis). Default: all"
         ),
     )
     parser.add_argument(
@@ -443,11 +469,23 @@ def main():
 
     # Direct CSV scoring without experiment config
     if args.reprompt_csv:
-        if args.phase != "score":
-            print("Error: --reprompt-csv solo se puede usar con --phase score", file=sys.stderr)
+        if args.phase == "score":
+            run_score(args.reprompt_csv)
+            return
+        elif args.phase == "nlp":
+            try:
+                from models.scripts.eval_reprompt_nlp import evaluate_csv
+                from models.validate import ABLATIONS_PATH
+                run_id = args.run_id or _generate_run_id()
+                out_dir = str(ABLATIONS_PATH / "analysis" / f"A_{run_id}")
+                for path in args.reprompt_csv:
+                    evaluate_csv(path, output_dir=out_dir)
+            except ImportError as e:
+                print(f"  ⚠ Faltan dependencias para evaluar NLP: {e}", file=sys.stderr)
+            return
+        else:
+            print("Error: --reprompt-csv solo se puede usar con --phase score o --phase nlp", file=sys.stderr)
             sys.exit(1)
-        run_score(args.reprompt_csv)
-        return
 
     if not args.experiment:
         print("Error: se requiere --experiment o --reprompt-csv", file=sys.stderr)
