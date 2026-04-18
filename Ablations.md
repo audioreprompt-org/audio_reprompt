@@ -39,11 +39,13 @@ Un `seed` fijo garantiza que todas las variantes de un mismo experimento usen **
 
 ### Recuperación (Componente A) — solo reprompts
 
-Las ablaciones de recuperación generan únicamente archivos CSV de reprompts para análisis textual (comparación entre modelos y configuraciones). **No requieren audio ni cálculo de CLAP score.**
+Las ablaciones de recuperación generan únicamente archivos CSV de reprompts para análisis textual (comparación entre modelos y configuraciones).
+**No requieren generación de audio ni cálculo de CLAP score.** 
+Al finalizar, ejecutan de manera automática un pipeline ligero de **NLP (Type-Token Ratio, Entropía de Shannon, Legibilidad Flesch, Coseno con MiniLM)** para validar que el *reprompt* no pierde consistencia léxica o de intención semántica.
 
-```
-make ablation-A1                              → genera CSVs de reprompts
-make ablation-retrieval                       → ejecuta todos los A-series
+```bash
+make ablation-A1                              → genera CSVs de reprompts y métricas NLP (.md/.csv)
+make ablation-retrieval                       → ejecuta todos los A-series + NLP evaluation
 ```
 
 ### Generación (Componente B) — tres fases con Kaggle
@@ -82,9 +84,10 @@ make kaggle-download
 
 ### Evaluación manual de CSVs
 
-También se pueden puntuar archivos CSV directamente:
+También se pueden puntuar archivos CSV directamente (ya sea con CLAP de audio o con métricas NLP ligeras de texto):
 ```bash
 make ablation-score-csv CSV="data/ablations/reprompts/pipeline_results_*.csv"
+make ablation-nlp-csv CSV="data/ablations/reprompts/pipeline_results_*.csv"
 ```
 
 ---
@@ -318,7 +321,8 @@ make ablation-analysis EXPERIMENT=B2 RUN=R20260416_194531  # análisis de un run
 make ablation-analysis-list
 
 # Puntuar CSVs existentes directamente
-make ablation-score-csv CSV="data/ablations/reprompts/mi_archivo.csv"
+make ablation-score-csv CSV="data/ablations/reprompts/mi_archivo.csv"  # CLAP Scores (requiere audios)
+make ablation-nlp-csv CSV="data/ablations/reprompts/mi_archivo.csv"    # NLP metrics (solo texto)
 ```
 
 ## Run ID
@@ -347,7 +351,10 @@ data/ablations/
 │   ├── clap_score_results_reprompt_outputs_*_R20260416_194531.csv
 │   ├── clap_score_results_prompt_outputs_*_R20260416_194531_raw.csv
 │   └── clap_score_results_prompt_outputs_*_R20260416_194531_cross.csv
-├── analysis/        # Reportes estadísticos (Fase 4)
+├── analysis/        # Reportes estadísticos (Fase 4 & NLP)
+│   ├── A_R20260416_194531/
+│   │   ├── nlp_eval_kimi_k2_thinking_..._R20260416_194531.md
+│   │   └── nlp_eval_kimi_k2_thinking_..._R20260416_194531.csv
 │   └── B2_R20260416_194531/
 │       ├── hallazgos_B2.md
 │       ├── summary_B2.csv
