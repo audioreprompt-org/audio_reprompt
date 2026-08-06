@@ -28,6 +28,7 @@ dependencies = [
     "nbconvert>=7.16.6",
     "wordcloud>=1.9.4",
     "statsmodels>=0.14.5",
+    "textstat>=0.7.13",
 ]
 
 [build-system]
@@ -51,4 +52,5 @@ dev = [
     "pytest>=8.4.2",
     "ruff>=0.14.0",
     "matplotlib>=3.10.7",
+    "kaggle>=2.0.1",
 ]

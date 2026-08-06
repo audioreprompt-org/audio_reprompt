@@ -433,15 +433,15 @@ def load_and_insert_crossmodal_food_embeddings():
 
     food_prompts_path = PROJECT_ROOT / config.data.cleaned_data_path / "food_prompts"
 
-    for filepath in glob.glob(f"{food_prompts_path}/*.csv"):
+    for filepath in glob.glob(f"{food_prompts_path}/results/*.csv"):
         for chunk in chunks(parse_food_crossmodal_items(filepath), 100):
             insert_crossmodal_food_embeddings(encode_food_crossmodal_items(chunk))
-
 
 
 if __name__ == "__main__":
     # set manual option
     option = ExecutionOption.INSERT_CROSSMODAL_FOOD_EMBEDDINGS
+    # option = ExecutionOption.INSERT_AUDIO_DESCRIPTORS
 
     match option:
         case ExecutionOption.INSERT_GUEDES_AUDIO_EMBEDDINGS:
