@@ -1,0 +1,6 @@
+outs:
+- md5: e6bc68c27b88ba2645830393c069c180.dir
+  size: 463698880
+  nfiles: 654
+  hash: md5
+  path: ablations

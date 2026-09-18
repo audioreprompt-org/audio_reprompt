@@ -1,4 +1,25 @@
 services:
+  # Servicio de Base de Datos (PostgreSQL + pgvector)
+  db:
+    build:
+      context: ../db
+      dockerfile: Dockerfile
+    environment:
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+    ports:
+      # Expone PG en el host para acceso local de desarrollo
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
   # Servicio Frontend (Vue/Nginx)
   frontend:
     # Construye a partir del Dockerfile en el directorio actual
@@ -35,10 +56,15 @@ services:
       - DB_NAME=${DB_NAME:-postgres}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      # If DB is on the host machine, use 'host.docker.internal'.
-      # If it's another container, use the service name.
-      - DB_HOST=${DB_HOST:-host.docker.internal}
+      # Uses the 'db' service name by default when running with Compose.
+      # Override with 'host.docker.internal' to connect to a DB on the host.
+      - DB_HOST=${DB_HOST:-db}
       # --- LLM Provider Keys (Required for Reprompt) ---
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
-
+    depends_on:
+      db:
+        condition: service_healthy
     restart: always
+
+volumes:
+  pgdata:
