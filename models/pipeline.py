@@ -6,7 +6,7 @@ from models.descriptors.rag import (
     get_top_k_audio_captions,
     CrossModalRAGResult,
 )
-from models.music_curator.kimi_mcu import mcu_reprompt, KIMI_K2_THINKING_MODEL
+from models.music_curator.kimi_mcu import mcu_reprompt, OPENAI_GPT_LUNA_MODEL
 
 
 def custom_single_sentence(crossmodal_descriptors: list[CrossModalRAGResult]) -> str:
@@ -42,7 +42,7 @@ def format_crossmodal_descriptors(
 
 def transform(
     user_prompt: str,
-    model: str = KIMI_K2_THINKING_MODEL,
+    model: str = OPENAI_GPT_LUNA_MODEL,
     prompt_version: str = "V4",
     cut_results: bool = True,
     k: int = 10,

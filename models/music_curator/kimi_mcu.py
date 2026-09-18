@@ -10,6 +10,8 @@ from models.music_curator.prompts import MCU_PROMPTS
 
 KIMI_K2_THINKING_MODEL = "kimi-k2-thinking"
 OPENAI_GPT_5_NANO_MODEL = "gpt-5-nano"
+OPENAI_GPT_LUNA_MODEL = "gpt-5.6-luna"
+OPENAI_GPT_OSS_MODEL = "gpt-oss-120b"
 
 
 MUSIC_CURATOR_ROLE = """
@@ -65,8 +67,8 @@ def _write_cache(key: str, response: str) -> None:
 @lru_cache(maxsize=2)
 def get_client(model: str):
     return (
-        OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        if model == OPENAI_GPT_5_NANO_MODEL
+        OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=os.getenv("OPENAI_BASE_URL"))
+        if model in (OPENAI_GPT_OSS_MODEL, OPENAI_GPT_LUNA_MODEL, )
         else OpenAI(
             api_key=os.getenv("MOONSHOT_API_KEY"),
             base_url="https://api.moonshot.ai/v1",
@@ -80,7 +82,7 @@ def get_client(model: str):
 def mcu_reprompt(
     crossmodal_descriptors: str,
     music_captions: str,
-    model: str = KIMI_K2_THINKING_MODEL,
+    model: str = OPENAI_GPT_LUNA_MODEL,
     prompt_version: str = "V3",
     system_prompt_modifier: str | None = None,
     presence_penalty: float | None = None,

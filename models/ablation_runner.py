@@ -29,6 +29,8 @@ setup_project_paths()
 from models.music_curator.kimi_mcu import (
     KIMI_K2_THINKING_MODEL,
     OPENAI_GPT_5_NANO_MODEL,
+    OPENAI_GPT_LUNA_MODEL,
+    OPENAI_GPT_OSS_MODEL,
 )
 from models.pipeline import FILTER_DIMENSIONS_DEFAULT
 from models.validate import (
@@ -41,14 +43,14 @@ from models.validate import (
 
 ABLATIONS_AUDIO_PATH = ABLATIONS_PATH / "audio"
 
-BOTH_MODELS = [KIMI_K2_THINKING_MODEL, OPENAI_GPT_5_NANO_MODEL]
+BOTH_MODELS = [KIMI_K2_THINKING_MODEL, OPENAI_GPT_5_NANO_MODEL, OPENAI_GPT_LUNA_MODEL, OPENAI_GPT_OSS_MODEL]
 
 
 @dataclass
 class AblationConfig:
     name: str
     tag: str
-    models: list[str] = field(default_factory=lambda: [KIMI_K2_THINKING_MODEL])
+    models: list[str] = field(default_factory=lambda: [OPENAI_GPT_LUNA_MODEL])
     prompt_version: str = "V4"
     cut_results: bool = True
     k: int = 10
