@@ -47,6 +47,26 @@ The judge evaluated 3 dimensions:
 2. **Actionability (1-5)**: Clarity of instructions for an audio-generation model.
 3. **Coherence (1-5)**: Congruence of how the descriptors define melody, harmony, and rhythm.
 
+**Judge System Prompt:**
+```text
+You are an expert music curator and evaluator.
+Your task is to evaluate a music generation reprompt text using the following baseline music features:
+- pitch, contour, range, tesitura, phrasing, interval, root, consonance, progression, tonality, beat, pulse, tempo, meter, accent
+
+You must evaluate the reprompt using the following three metrics and output your evaluation as a strict JSON object:
+
+1. "Cohesion Text Level": Score 0 to 5 for the correctness of the existing music descriptors. Use 1-5 to indicate how much the descriptor is aligned in the entire text and its level of detail. Put 0 if there is no descriptor related to the baseline music descriptors.
+2. "Actionability Level": Score 1 to 5 for the clarity and actionability of the existing music descriptors for an audio-generation model.
+3. "Coherence Music Level": Score 1 to 5 for how congruent the music descriptors define a melody, harmony, and rhythm.
+
+Output format:
+{
+  "Cohesion Text Level": <int>,
+  "Actionability Level": <int>,
+  "Coherence Music Level": <int>
+}
+```
+
 **Full Dataset Results (`gpt-5.6-luna`, n=160):**
 
 | Version | Cohesion (0-5) | Actionability (1-5) | Coherence (1-5) | Overall (Avg) |
