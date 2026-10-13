@@ -1,14 +1,14 @@
 """
 CLI para ejecutar experimentos de ablación definidos en Ablations.md.
 
-Retrieval (A-series) — solo genera reprompts (métricas textuales):
-    python -m models.ablation_runner --experiment A1a
-
 Generation (B-series) — flujo por fases (audio en Kaggle GPU):
     Fase 1: python -m models.ablation_runner --experiment B1a --phase reprompt
     Fase 2: python -m models.kaggle_runner run --csvs data/ablations/reprompts/*.csv
     Fase 3: python -m models.ablation_runner --experiment B1a --phase score
              python -m models.ablation_runner --phase score --reprompt-csv <path>
+
+Evaluación NLP de reprompts (diversidad léxica, entropía, legibilidad):
+    python -m models.ablation_runner --phase nlp --reprompt-csv <path>
 
 Pipeline completo (reprompt → Kaggle GPU → score → análisis):
     python -m models.ablation_runner --experiment B2 --phase full
@@ -27,10 +27,7 @@ from config import setup_project_paths
 setup_project_paths()
 
 from models.music_curator.kimi_mcu import (
-    KIMI_K2_THINKING_MODEL,
-    OPENAI_GPT_5_NANO_MODEL,
     OPENAI_GPT_LUNA_MODEL,
-    OPENAI_GPT_OSS_MODEL,
 )
 from models.pipeline import FILTER_DIMENSIONS_DEFAULT
 from models.validate import (
@@ -42,8 +39,6 @@ from models.validate import (
 )
 
 ABLATIONS_AUDIO_PATH = ABLATIONS_PATH / "audio"
-
-BOTH_MODELS = [KIMI_K2_THINKING_MODEL, OPENAI_GPT_5_NANO_MODEL, OPENAI_GPT_LUNA_MODEL, OPENAI_GPT_OSS_MODEL]
 
 
 @dataclass
@@ -58,37 +53,8 @@ class AblationConfig:
     system_prompt_modifier: str | None = None
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
-    requires_audio: bool = False
+    requires_audio: bool = True
 
-
-# ── Retrieval (se ejecutan con ambos modelos) ──────────────
-
-RETRIEVAL_ABLATIONS: dict[str, AblationConfig] = {
-    # A1 — Heurística de corte
-    "A1a": AblationConfig(
-        name="A1a — cut_results=True", tag="A1a", models=BOTH_MODELS, cut_results=True
-    ),
-    "A1b": AblationConfig(
-        name="A1b — cut_results=False", tag="A1b", models=BOTH_MODELS, cut_results=False
-    ),
-    # A2 — Top-K captions
-    "A2a": AblationConfig(name="A2a — k=5", tag="A2a_k5", models=BOTH_MODELS, k=5),
-    "A2b": AblationConfig(name="A2b — k=10", tag="A2b_k10", models=BOTH_MODELS, k=10),
-    "A2c": AblationConfig(name="A2c — k=50", tag="A2c_k50", models=BOTH_MODELS, k=50),
-    # A3 — Filtro de dimensiones
-    "A3a": AblationConfig(
-        name="A3a — emotion/taste/texture",
-        tag="A3a",
-        models=BOTH_MODELS,
-        filter_dimensions=FILTER_DIMENSIONS_DEFAULT,
-    ),
-    "A3b": AblationConfig(
-        name="A3b — sin filtro",
-        tag="A3b_nofilter",
-        models=BOTH_MODELS,
-        filter_dimensions=None,
-    ),
-}
 
 # ── Generation ─────────────────────────────────────────────
 
@@ -129,7 +95,7 @@ GENERATION_ABLATIONS: dict[str, AblationConfig] = {
     ),
 }
 
-ALL_ABLATIONS = {**RETRIEVAL_ABLATIONS, **GENERATION_ABLATIONS}
+ALL_ABLATIONS = GENERATION_ABLATIONS
 
 
 def _generate_run_id() -> str:
@@ -181,10 +147,7 @@ def run_reprompt(cfg: AblationConfig, sample_size: int, seed: int, run_id: str =
         generated.append(result_csv)
         print(f"  ✓ Reprompts guardados en: {result_csv}")
 
-    if cfg.requires_audio:
-        print(f"\n  ⏸  Genera los audios con los CSVs anteriores y ejecuta --phase score")
-    else:
-        print(f"\n  ✓ Retrieval completado (no requiere generación de audio)")
+    print(f"\n  ⏸  Genera los audios con los CSVs anteriores y ejecuta --phase score")
     return generated
 
 
@@ -254,32 +217,18 @@ def run_score(csv_paths: list[str], audio_dir: str | None = None) -> None:
 
 
 def run_ablation(cfg: AblationConfig, sample_size: int, seed: int, phase: str, run_id: str = "") -> None:
-    # Retrieval ablations only generate reprompts (text-level metrics)
-    if not cfg.requires_audio and phase in ("score", "all"):
-        effective_phase = "reprompt"
-        if phase == "score":
-            print(
-                f"  ⚠ '{cfg.name}' es retrieval — no requiere audio/CLAP. Saltando.",
-                file=sys.stderr,
-            )
-            return
-        # phase == "all" → just run reprompt
-        print(f"  ℹ '{cfg.name}' es retrieval — ejecutando solo reprompts.")
-    elif phase == "nlp":
-        effective_phase = "score" # Lo usamos como alias para recolectar CSVs
-    else:
-        effective_phase = phase
+    effective_phase = "score" if phase == "nlp" else phase
 
     if effective_phase in ("reprompt", "all"):
         csvs = run_reprompt(cfg, sample_size, seed, run_id)
-        if not cfg.requires_audio or phase == "nlp":
+        if phase == "nlp":
             print(f"\n{'═' * 60}")
             print(f"  FASE NLP: Evaluando métricas ligeras")
             print(f"{'═' * 60}")
             try:
                 from models.scripts.eval_reprompt_nlp import evaluate_csv
                 from models.validate import ABLATIONS_PATH
-                out_dir = str(ABLATIONS_PATH / "analysis" / f"A_{run_id}")
+                out_dir = str(ABLATIONS_PATH / "analysis" / f"nlp_{run_id}")
                 for csv_path in csvs:
                     evaluate_csv(csv_path, output_dir=out_dir)
             except ImportError as e:
@@ -305,14 +254,14 @@ def run_ablation(cfg: AblationConfig, sample_size: int, seed: int, phase: str, r
 
     if effective_phase in ("score", "all") and phase != "nlp":
         run_score(csvs, audio_dir=str(ABLATIONS_AUDIO_PATH))
-    elif phase == "nlp":
+    elif phase == "nlp" and effective_phase == "score":
         print(f"\n{'═' * 60}")
         print(f"  FASE NLP: Evaluando métricas ligeras")
         print(f"{'═' * 60}")
         try:
             from models.scripts.eval_reprompt_nlp import evaluate_csv
             from models.validate import ABLATIONS_PATH
-            out_dir = str(ABLATIONS_PATH / "analysis" / f"A_{run_id}")
+            out_dir = str(ABLATIONS_PATH / "analysis" / f"nlp_{run_id}")
             for csv_path in csvs:
                 evaluate_csv(csv_path, output_dir=out_dir)
         except ImportError as e:
@@ -337,15 +286,6 @@ def run_full_pipeline(
     if not run_id:
         run_id = _generate_run_id()
     print(f"  Run ID: {run_id}")
-
-    # Verify all targets require audio
-    non_audio = [k for k, cfg in targets.items() if not cfg.requires_audio]
-    if non_audio:
-        print(
-            f"  ⚠ Retrieval experiments no soportan --phase full: {non_audio}",
-            file=sys.stderr,
-        )
-        return
 
     # ── Phase 1: Generate reprompts ───────────────────────────
     print(f"\n{'═' * 60}")
@@ -410,8 +350,8 @@ def main():
     parser.add_argument(
         "--experiment",
         help=(
-            "ID del experimento (e.g. A1a, B3c) o grupo: "
-            "'all', 'retrieval', 'generation', 'A1', 'A2', 'A3', 'B1', 'B3'"
+            "ID del experimento (e.g. B1a, B3c) o grupo: "
+            "'all', 'generation', 'B1', 'B2', 'B3'"
         ),
     )
     parser.add_argument(
@@ -459,10 +399,6 @@ def main():
     args = parser.parse_args()
 
     if args.list_experiments:
-        print("\nExperimentos de Retrieval (solo reprompts — métricas textuales):")
-        for key, cfg in RETRIEVAL_ABLATIONS.items():
-            models_str = ", ".join(cfg.models)
-            print(f"  {key:6s}  {cfg.name}  [{models_str}]")
         print("\nExperimentos de Generación (requieren audio/Kaggle + CLAP):")
         for key, cfg in GENERATION_ABLATIONS.items():
             models_str = ", ".join(cfg.models)
@@ -479,7 +415,7 @@ def main():
                 from models.scripts.eval_reprompt_nlp import evaluate_csv
                 from models.validate import ABLATIONS_PATH
                 run_id = args.run_id or _generate_run_id()
-                out_dir = str(ABLATIONS_PATH / "analysis" / f"A_{run_id}")
+                out_dir = str(ABLATIONS_PATH / "analysis" / f"nlp_{run_id}")
                 for path in args.reprompt_csv:
                     evaluate_csv(path, output_dir=out_dir)
             except ImportError as e:
@@ -495,13 +431,9 @@ def main():
 
     experiment = args.experiment
 
-    if experiment == "all":
+    if experiment in ("all", "generation"):
         targets = ALL_ABLATIONS
-    elif experiment == "retrieval":
-        targets = RETRIEVAL_ABLATIONS
-    elif experiment == "generation":
-        targets = GENERATION_ABLATIONS
-    elif len(experiment) == 2 and experiment in ("A1", "A2", "A3", "B1", "B2", "B3"):
+    elif len(experiment) == 2 and experiment in ("B1", "B2", "B3"):
         targets = {k: v for k, v in ALL_ABLATIONS.items() if k.startswith(experiment)}
     elif experiment in ALL_ABLATIONS:
         targets = {experiment: ALL_ABLATIONS[experiment]}

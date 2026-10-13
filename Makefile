@@ -27,7 +27,6 @@ ABLATION_CMD = uv run --env-file .env python -m models.ablation_runner
 SAMPLE_SIZE ?= 30
 SEED ?= 42
 PHASE ?= all
-RETRIEVAL_ARGS = --sample-size $(SAMPLE_SIZE) --seed $(SEED)
 GENERATION_ARGS = --sample-size $(SAMPLE_SIZE) --seed $(SEED) --phase $(PHASE)
 
 # Listar experimentos
@@ -38,39 +37,9 @@ ablation-list:
 ablation-score-csv:
 	$(ABLATION_CMD) --phase score --reprompt-csv $(CSV)
 
-# Calcular métricas NLP para CSVs existentes de retrieval (uso: make ablation-nlp-csv CSV="path1.csv path2.csv")
+# Calcular métricas NLP para CSVs existentes (uso: make ablation-nlp-csv CSV="path1.csv path2.csv")
 ablation-nlp-csv:
 	$(ABLATION_CMD) --phase nlp --reprompt-csv $(CSV)
-
-# ── Retrieval (solo reprompts — métricas textuales, ambos modelos) ─
-ablation-A1a:
-	$(ABLATION_CMD) --experiment A1a $(RETRIEVAL_ARGS)
-
-ablation-A1b:
-	$(ABLATION_CMD) --experiment A1b $(RETRIEVAL_ARGS)
-
-ablation-A1: ablation-A1a ablation-A1b
-
-ablation-A2a:
-	$(ABLATION_CMD) --experiment A2a $(RETRIEVAL_ARGS)
-
-ablation-A2b:
-	$(ABLATION_CMD) --experiment A2b $(RETRIEVAL_ARGS)
-
-ablation-A2c:
-	$(ABLATION_CMD) --experiment A2c $(RETRIEVAL_ARGS)
-
-ablation-A2: ablation-A2a ablation-A2b ablation-A2c
-
-ablation-A3a:
-	$(ABLATION_CMD) --experiment A3a $(RETRIEVAL_ARGS)
-
-ablation-A3b:
-	$(ABLATION_CMD) --experiment A3b $(RETRIEVAL_ARGS)
-
-ablation-A3: ablation-A3a ablation-A3b
-
-ablation-retrieval: ablation-A1 ablation-A3 ablation-A2
 
 # ── Generation (requieren audio/Kaggle + CLAP, usar PHASE) ────
 ablation-B1a:
@@ -164,4 +133,4 @@ ablation-analysis-list:
 	$(ANALYSIS_CMD) --list
 
 # ── All ablations (ordered per Ablations.md) ──────────────────
-ablation-all: ablation-retrieval ablation-generation
+ablation-all: ablation-generation

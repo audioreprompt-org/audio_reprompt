@@ -80,7 +80,7 @@ def _discover_experiment_groups(run_id: str = "") -> dict[str, list[str]]:
         if run_id and run_id not in tag:
             continue
         # extract experiment prefix: B2a_filter_default_R... → B2
-        match = re.match(r".*?(A\d|B\d)", tag)
+        match = re.match(r".*?(B\d)", tag)
         if match:
             prefix = match.group(1)
             groups.setdefault(prefix, []).append(tag)
@@ -776,7 +776,7 @@ def main():
     )
     parser.add_argument(
         "--experiment",
-        help="Experiment group to analyse (e.g. B2, B1, A1)",
+        help="Experiment group to analyse (e.g. B1, B2, B3)",
     )
     parser.add_argument(
         "--run",
