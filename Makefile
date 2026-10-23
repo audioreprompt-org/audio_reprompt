@@ -134,3 +134,17 @@ ablation-analysis-list:
 
 # ── All ablations (ordered per Ablations.md) ──────────────────
 ablation-all: ablation-generation
+
+# ── RAG IR Quality Evaluation ─────────────────────────────────
+IR_EVAL_CMD = uv run --env-file .env python -m models.ir_eval.cli
+IR_OUTPUT_DIR ?= $(OUTPUT_DIR)
+IR_QUERIES ?= $(QUERIES)
+EXTRA_ARGS ?=
+
+# Run RAG IR evaluation using ir_eval CLI (usage: make rag-eval [SEED=42] [IR_OUTPUT_DIR=path] [IR_QUERIES=path] [EXTRA_ARGS="..."])
+rag-eval:
+	$(IR_EVAL_CMD) $(if $(SEED),--seed $(SEED)) $(if $(IR_OUTPUT_DIR),--output-dir $(IR_OUTPUT_DIR)) $(if $(IR_QUERIES),--queries $(IR_QUERIES)) $(EXTRA_ARGS)
+
+# Run only RAG diagnostics (skips retrieval loops)
+rag-eval-diagnostics:
+	$(IR_EVAL_CMD) $(if $(SEED),--seed $(SEED)) $(if $(IR_OUTPUT_DIR),--output-dir $(IR_OUTPUT_DIR)) $(if $(IR_QUERIES),--queries $(IR_QUERIES)) --skip-retrieval $(EXTRA_ARGS)

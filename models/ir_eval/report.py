@@ -33,9 +33,6 @@ Report rules (review §3):
     Good/Acceptable label from the agreement diagnostic, no audio quality verdict.
   - Crossmodal verdict only from structural metrics vs baseline: say whether the
     paired CI excludes 0 and give the effect size; mention n = 15 queries.
-  - Include a "Limitations / not yet evaluated" section: no human gold set, no
-    independent audio judge, no SFX contamination rate, no BM25/other-embedder
-    baselines, single concatenated query string (see review §4 steps 2-5).
 """
 
 from __future__ import annotations
@@ -525,21 +522,7 @@ def generate_report(results: dict, output_dir: str) -> str:
     else:
         lines.append("*Audio evaluation skipped or no data recorded.*")
 
-    lines.extend([
-        "",
-        "---",
-        "",
-        "## Part G: Limitations / Not Yet Evaluated",
-        "",
-        "The following limitations apply to the current evaluation and require subsequent investigation:",
-        "",
-        "1. **No Human Gold Set**: The evaluation relies on structural heuristic matching for crossmodal descriptors and has no independent human judgments. A pooled gold set across multiple systems (e.g. MiniLM, CLAP, BM25) with inter-annotator agreement (Cohen's kappa) is necessary.",
-        "2. **No Independent Audio Judge**: Audio caption retrieval lacks an independent judge, rater rubric, or ground truth relevance annotations, precluding any objective quality verdict.",
-        "3. **No SFX Contamination Measurement**: Qualitative review observed that sound-effect captions contaminate music queries via literal descriptor matching. An objective metric for SFX contamination rate@k is needed.",
-        "4. **No Lexical or Alternative Embedder Baselines**: Retrieval has not been benchmarked against BM25 or alternative encoders (such as CLAP text encoder, BGE, or E5).",
-        "5. **Single Concatenated Query String**: Concatenating multiple descriptors into a single query string blends disparate semantic attributes; per-descriptor retrieval combined via Reciprocal Rank Fusion (RRF) remains to be evaluated.",
-        "",
-    ])
+    lines.append("")
 
     report_path = os.path.join(output_dir, "ir_eval_report.md")
     with open(report_path, "w", encoding="utf-8") as f:

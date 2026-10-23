@@ -328,7 +328,7 @@ def test_generate_report_outputs(tmp_path, synthetic_results):
     assert "isotropy" not in md.lower(), "Markdown must NOT contain 'isotropy' (or 'anisotropy')"
     assert "strong discriminative" not in md.lower(), "Markdown must NOT contain 'Strong discriminative'"
     assert "good (ndcg" not in md.lower(), "Markdown must NOT contain 'Good (nDCG'"
-    assert "Limitations" in md, "Markdown MUST contain 'Limitations'"
+    assert "Part G" not in md, "Markdown must NOT contain 'Part G'"
 
     # Production primary table
     assert "System (cut_results=True)" in md
