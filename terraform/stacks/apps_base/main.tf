@@ -23,3 +23,16 @@ module "project_secrets_manager" {
     module.project_rds_db
   ]
 }
+
+module "ec2_runner" {
+  count         = var.enable_ec2_runner ? 1 : 0
+  source        = "../../modules/ec2_runner"
+  secret_arn    = module.project_secrets_manager.secret_arn
+  instance_type = var.runner_instance_type
+  owner         = var.owner
+
+  depends_on = [
+    module.project_secrets_manager
+  ]
+}
+

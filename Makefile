@@ -84,7 +84,7 @@ ablation-B3: ablation-B3a ablation-B3b ablation-B3c ablation-B3d ablation-B3e
 ablation-generation: ablation-B1 ablation-B2 ablation-B3
 
 # ── Full pipeline: reprompt → Kaggle → score → analysis ───────
-FULL_ARGS = --sample-size $(SAMPLE_SIZE) --seed $(SEED) --phase full
+FULL_ARGS = --sample-size $(SAMPLE_SIZE) --seed $(SEED) --phase full $(if $(RUN_ID),--run-id $(RUN_ID))
 
 ablation-B1-full:
 	$(ABLATION_CMD) --experiment B1 $(FULL_ARGS)
@@ -94,6 +94,15 @@ ablation-B2-full:
 
 ablation-B3-full:
 	$(ABLATION_CMD) --experiment B3 $(FULL_ARGS)
+
+# Concurrency-safe publish to DVC and git
+ablation-publish:
+	./scripts/ablation_publish.sh $(if $(RUN_ID),--run-id $(RUN_ID)) $(if $(BRANCH),--branch $(BRANCH))
+
+# On-demand unattended runner (runs pipeline, publishes DVC hash, optional shutdown)
+ablation-job:
+	./scripts/run_ablation_job.sh --experiment $(or $(EXPERIMENT),B2) $(if $(RUN_ID),--run-id $(RUN_ID)) $(if $(SAMPLE_SIZE),--sample-size $(SAMPLE_SIZE)) $(if $(SEED),--seed $(SEED)) $(if $(BRANCH),--branch $(BRANCH)) $(if $(SHUTDOWN),--shutdown) $(if $(KAGGLE_USER),--kaggle-user $(KAGGLE_USER)) $(if $(KAGGLE_SECRET),--kaggle-secret $(KAGGLE_SECRET))
+
 
 # ── Kaggle remote audio generation ────────────────────────────
 KAGGLE_CMD = uv run python -m models.kaggle_runner

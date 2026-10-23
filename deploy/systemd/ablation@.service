@@ -1,0 +1,26 @@
+[Unit]
+Description=Audio Reprompt Ablation Runner (%i)
+Documentation=https://github.com/audioreprompt-org/audio_reprompt
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/audio_reprompt
+EnvironmentFile=-/etc/ablation/env
+Environment=PYTHONUNBUFFERED=1
+Environment=KAGGLE_ISOLATE_RUNS=1
+
+# %i receives the experiment name, e.g. B1, B2, B3
+ExecStart=/opt/audio_reprompt/scripts/run_ablation_job.sh --experiment %i --shutdown
+
+# Logging and limits
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=14400
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

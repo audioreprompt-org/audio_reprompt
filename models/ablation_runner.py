@@ -40,6 +40,13 @@ from models.validate import (
 
 ABLATIONS_AUDIO_PATH = ABLATIONS_PATH / "audio"
 
+# Exit codes for `--phase full` (consumed by scripts/ablation_job.sh)
+EXIT_OK = 0
+EXIT_REPROMPT_FAILED = 2
+EXIT_KAGGLE_FAILED = 3
+EXIT_SCORE_FAILED = 4
+EXIT_ANALYSIS_FAILED = 5
+
 
 @dataclass
 class AblationConfig:
@@ -274,11 +281,12 @@ def run_full_pipeline(
     seed: int,
     group_prefix: str,
     run_id: str = "",
-) -> None:
+) -> int:
     """Run the full pipeline for generation ablations:
     reprompt → Kaggle GPU audio → CLAP score → statistical analysis.
 
     All variant CSVs are batched into a single Kaggle kernel push.
+    Returns an EXIT_* code so callers (make/systemd) can detect failures.
     """
     from models.kaggle_runner import run_pipeline as kaggle_run
     from models.ablation_analysis import analyse_group
@@ -298,7 +306,7 @@ def run_full_pipeline(
 
     if not all_csvs:
         print("  Error: no se generaron CSVs de reprompts.", file=sys.stderr)
-        return
+        return EXIT_REPROMPT_FAILED
 
     print(f"\n  Total CSVs generados: {len(all_csvs)}")
 
@@ -312,20 +320,24 @@ def run_full_pipeline(
             output_dir=str(ABLATIONS_AUDIO_PATH),
             run_id=run_id,
         )
-    except RuntimeError as e:
+    except (RuntimeError, SystemExit) as e:
         print(f"  ✗ Kaggle falló: {e}", file=sys.stderr)
         print(
             "  Puedes reintentar la fase de score manualmente:\n"
             f"    python -m models.ablation_runner --experiment {group_prefix} --phase score",
             file=sys.stderr,
         )
-        return
+        return EXIT_KAGGLE_FAILED
 
     # ── Phase 3: CLAP scoring ────────────────────────────────
     print(f"\n{'═' * 60}")
     print(f"  FASE 3: Calcular CLAP scores")
     print(f"{'═' * 60}")
-    run_score(all_csvs, audio_dir=str(ABLATIONS_AUDIO_PATH))
+    try:
+        run_score(all_csvs, audio_dir=str(ABLATIONS_AUDIO_PATH))
+    except Exception as e:  # noqa: BLE001 — report and map to an exit code
+        print(f"  ✗ CLAP scoring falló: {e!r}", file=sys.stderr)
+        return EXIT_SCORE_FAILED
 
     # ── Phase 4: Statistical analysis ────────────────────────
     print(f"\n{'═' * 60}")
@@ -339,8 +351,10 @@ def run_full_pipeline(
             f"    python -m models.ablation_analysis --experiment {group_prefix}",
             file=sys.stderr,
         )
+        return EXIT_ANALYSIS_FAILED
 
     print(f"\n  ✓ Pipeline completo para {group_prefix}.")
+    return EXIT_OK
 
 
 def main():
@@ -446,8 +460,9 @@ def main():
     if args.phase == "full":
         # Determine group prefix for analysis
         group_prefix = experiment if len(experiment) == 2 else experiment[:2]
-        run_full_pipeline(targets, args.sample_size, args.seed, group_prefix, args.run_id)
-        return
+        sys.exit(
+            run_full_pipeline(targets, args.sample_size, args.seed, group_prefix, args.run_id)
+        )
 
     # For non-full phases, generate a run_id if not provided
     run_id = args.run_id or _generate_run_id()

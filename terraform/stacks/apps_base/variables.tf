@@ -46,3 +46,16 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "enable_ec2_runner" {
+  description = "Desplegar VM EC2 para ejecuciones desatendidas (on-demand)"
+  type        = bool
+  default     = false
+}
+
+variable "runner_instance_type" {
+  description = "Tipo de instancia EC2 para el runner"
+  type        = string
+  default     = "t3.xlarge"
+}
+

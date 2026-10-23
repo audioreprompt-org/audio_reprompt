@@ -132,7 +132,7 @@ def calculate_clap_score_alignment(
         relative_audio_path = (
             Path(audio_dir) if audio_dir else AUDIOS_PATH / "reprompt_audios"
         )
-        optional_suffix = "cross_evaluation"
+        optional_suffix = optional_suffix or "cross_evaluation"
     else:
         print("calculando scores de clap para reprompts generados...")
         field = "reprompt"

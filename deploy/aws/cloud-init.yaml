@@ -1,0 +1,72 @@
+#cloud-config
+# ──────────────────────────────────────────────────────────────────────────────
+# cloud-init configuration for Audio Reprompt Ablation Runner VM on AWS EC2
+# ──────────────────────────────────────────────────────────────────────────────
+package_update: true
+package_upgrade: true
+
+packages:
+  - git
+  - rsync
+  - curl
+  - unzip
+  - build-essential
+  - python3-pip
+  - python3-venv
+  - awscli
+
+write_files:
+  - path: /etc/systemd/system/ablation@.service
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Audio Reprompt Ablation Runner (%i)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      User=ubuntu
+      Group=ubuntu
+      WorkingDirectory=/opt/audio_reprompt
+      EnvironmentFile=-/etc/ablation/env
+      Environment=PYTHONUNBUFFERED=1
+      Environment=KAGGLE_ISOLATE_RUNS=1
+      ExecStart=/opt/audio_reprompt/scripts/run_ablation_job.sh --experiment %i --shutdown
+      StandardOutput=journal+console
+      StandardError=journal+console
+      TimeoutStartSec=14400
+      KillMode=process
+
+runcmd:
+  # 1. Install uv
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - cp /root/.local/bin/uv /usr/local/bin/uv
+
+  # 2. Setup directory and repo clone
+  - mkdir -p /opt/audio_reprompt /etc/ablation
+  - chown -R ubuntu:ubuntu /opt/audio_reprompt /etc/ablation
+  - |
+    if [ ! -d /opt/audio_reprompt/.git ]; then
+      sudo -u ubuntu git clone https://github.com/audioreprompt-org/audio_reprompt.git /opt/audio_reprompt
+    fi
+
+  # 3. Pre-sync dependencies and models
+  - cd /opt/audio_reprompt
+  - sudo -u ubuntu uv sync --frozen || sudo -u ubuntu uv sync
+
+  # 4. Reload systemd daemon
+  - systemctl daemon-reload
+
+  # 5. Optional auto-trigger from instance tag 'AblationExperiment' (e.g. B2)
+  - |
+    INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id || true)
+    REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region || echo "us-east-1")
+    if [ -n "$INSTANCE_ID" ]; then
+      EXP_TAG=$(aws ec2 describe-tags --region "$REGION" --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=AblationExperiment" --query "Tags[0].Value" --output text 2>/dev/null || true)
+      if [ -n "$EXP_TAG" ] && [ "$EXP_TAG" != "None" ]; then
+        echo "Found AblationExperiment tag '$EXP_TAG'. Starting ablation@$EXP_TAG.service..."
+        systemctl start "ablation@${EXP_TAG}.service"
+      fi
+    fi
