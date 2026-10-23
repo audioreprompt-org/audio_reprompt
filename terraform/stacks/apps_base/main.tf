@@ -31,6 +31,11 @@ module "ec2_runner" {
   instance_type = var.runner_instance_type
   owner         = var.owner
 
+  experiment_tag      = var.runner_experiment_tag
+  git_branch          = var.runner_git_branch
+  kaggle_secret_name  = var.runner_kaggle_secret_name
+  git_ssh_secret_name = var.runner_git_ssh_secret_name
+
   depends_on = [
     module.project_secrets_manager
   ]

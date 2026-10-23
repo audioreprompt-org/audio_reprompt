@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodic idle check for Audio Reprompt Ablation Runner
+Documentation=https://github.com/audioreprompt-org/audio_reprompt
+After=network.target
+
+[Timer]
+# First check after 10 minutes from boot, then repeat every 5 minutes
+OnBootSec=10min
+OnUnitActiveSec=5min
+Unit=ablation-idle-guard.service
+
+[Install]
+WantedBy=timers.target

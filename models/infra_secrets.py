@@ -1,8 +1,13 @@
 """Infrastructure secrets and credentials manager.
 
 Provides reliable, reusable helpers for retrieving and setting up database
-(RDS/PostgreSQL) and Kaggle credentials from AWS Secrets Manager or environment
-variables without fragile shell parsing or inline python snippets.
+(RDS/PostgreSQL), Kaggle and git (deploy key) credentials from AWS Secrets
+Manager or environment variables without fragile shell parsing or inline
+python snippets.
+
+Any secret that is explicitly requested but cannot be resolved raises
+``SecretResolutionError`` (CLI exit code 1) so unattended jobs fail fast
+instead of running for hours without credentials.
 """
 
 from __future__ import annotations
@@ -13,15 +18,27 @@ import logging
 import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 logging.basicConfig(level=logging.INFO, format="[secrets %(asctime)s] %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
+GIT_DEPLOY_KEY_PATH = Path.home() / ".ssh" / "ablation_deploy_key"
 
-def fetch_secret(secret_name: str, region: str = "us-east-1") -> dict[str, Any]:
-    """Retrieve and parse a JSON secret from AWS Secrets Manager."""
+
+class SecretResolutionError(RuntimeError):
+    """A requested secret could not be retrieved or is missing required fields."""
+
+
+def fetch_secret_string(secret_name: str, region: str = "us-east-1") -> str:
+    """Retrieve the raw SecretString from AWS Secrets Manager.
+
+    Raises SecretResolutionError if neither boto3 nor the aws CLI can read it.
+    """
+    errors: list[str] = []
+
     # Try boto3 first
     try:
         import boto3
@@ -30,8 +47,10 @@ def fetch_secret(secret_name: str, region: str = "us-east-1") -> dict[str, Any]:
         resp = client.get_secret_value(SecretId=secret_name)
         secret_str = resp.get("SecretString")
         if secret_str:
-            return json.loads(secret_str)
+            return secret_str
+        errors.append("boto3: secret has no SecretString")
     except Exception as e:
+        errors.append(f"boto3: {e}")
         logger.debug(f"boto3 retrieval failed for {secret_name} ({e}); trying aws cli")
 
     # Fallback to aws CLI
@@ -50,10 +69,27 @@ def fetch_secret(secret_name: str, region: str = "us-east-1") -> dict[str, Any]:
             "text",
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return json.loads(res.stdout.strip())
+        if res.stdout.strip():
+            return res.stdout
+        errors.append("aws cli: empty SecretString")
     except Exception as e:
-        logger.warning(f"Failed to fetch secret '{secret_name}' from Secrets Manager: {e}")
-        return {}
+        errors.append(f"aws cli: {e}")
+
+    raise SecretResolutionError(
+        f"Failed to fetch secret '{secret_name}' ({region}): " + "; ".join(errors)
+    )
+
+
+def fetch_secret(secret_name: str, region: str = "us-east-1") -> dict[str, Any]:
+    """Retrieve and parse a JSON secret from AWS Secrets Manager."""
+    raw = fetch_secret_string(secret_name, region)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise SecretResolutionError(f"Secret '{secret_name}' is not valid JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise SecretResolutionError(f"Secret '{secret_name}' must be a JSON object")
+    return data
 
 
 def resolve_db_credentials(
@@ -65,23 +101,21 @@ def resolve_db_credentials(
 
     if secret_name:
         data = fetch_secret(secret_name, region)
-        if data:
-            host = data.get("host") or data.get("address")
-            port = str(data.get("port", "5432"))
-            user = data.get("username") or data.get("user")
-            pwd = data.get("password")
-            dbname = data.get("dbname") or data.get("db_name")
+        host = data.get("host") or data.get("address")
+        port = str(data.get("port") or "5432")
+        user = data.get("username") or data.get("user")
+        pwd = data.get("password")
+        dbname = data.get("dbname") or data.get("db_name")
 
-            if host:
-                env_vars["DB_HOST"] = str(host)
-            if port:
-                env_vars["DB_PORT"] = str(port)
-            if user:
-                env_vars["DB_USER"] = str(user)
-            if pwd:
-                env_vars["DB_PASSWORD"] = str(pwd)
-            if dbname:
-                env_vars["DB_NAME"] = str(dbname)
+        missing = [k for k, v in (("host", host), ("username", user), ("password", pwd), ("dbname", dbname)) if not v]
+        if missing:
+            raise SecretResolutionError(f"DB secret '{secret_name}' is missing fields: {missing}")
+
+        env_vars["DB_HOST"] = str(host)
+        env_vars["DB_PORT"] = port
+        env_vars["DB_USER"] = str(user)
+        env_vars["DB_PASSWORD"] = str(pwd)
+        env_vars["DB_NAME"] = str(dbname)
 
     return env_vars
 
@@ -99,13 +133,14 @@ def resolve_kaggle_credentials(
     # 1. From Secrets Manager if provided
     if secret_name:
         data = fetch_secret(secret_name, region)
-        if data:
-            s_user = data.get("username") or data.get("user") or data.get("KAGGLE_USERNAME")
-            s_key = data.get("key") or data.get("token") or data.get("KAGGLE_KEY")
-            if s_user:
-                username = s_user
-            if s_key:
-                key = s_key
+        s_user = data.get("username") or data.get("user") or data.get("KAGGLE_USERNAME")
+        s_key = data.get("key") or data.get("token") or data.get("KAGGLE_KEY")
+        if not (s_user and s_key):
+            raise SecretResolutionError(
+                f"Kaggle secret '{secret_name}' must contain 'username' and 'key'"
+            )
+        username = username or s_user  # explicit --kaggle-user still wins
+        key = key or s_key
 
     # 2. Direct overrides
     if username:
@@ -138,6 +173,38 @@ def resolve_kaggle_credentials(
     return env_vars
 
 
+def resolve_git_ssh_key(
+    secret_name: str,
+    region: str = "us-east-1",
+    key_path: Path = GIT_DEPLOY_KEY_PATH,
+) -> dict[str, str]:
+    """Install a GitHub deploy key from Secrets Manager and return GIT_SSH_COMMAND.
+
+    The secret may be the raw OpenSSH private key or a JSON object with a
+    ``private_key`` (or ``key``) field.
+    """
+    raw = fetch_secret_string(secret_name, region).strip()
+    if raw.startswith("{"):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise SecretResolutionError(f"Git SSH secret '{secret_name}' is invalid JSON: {e}") from e
+        raw = str(data.get("private_key") or data.get("key") or "").strip()
+    if "PRIVATE KEY" not in raw:
+        raise SecretResolutionError(f"Git SSH secret '{secret_name}' does not contain a private key")
+
+    key_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    key_path.touch(mode=0o600, exist_ok=True)
+    key_path.chmod(0o600)
+    key_path.write_text(raw + "\n")  # OpenSSH requires a trailing newline
+
+    ssh_cmd = (
+        f"ssh -i {shlex.quote(str(key_path))} -o IdentitiesOnly=yes "
+        "-o StrictHostKeyChecking=accept-new"
+    )
+    return {"GIT_SSH_COMMAND": ssh_cmd}
+
+
 def to_shell_exports(vars_dict: dict[str, str]) -> str:
     """Format dictionary into safely quoted shell export statements."""
     lines = []
@@ -152,6 +219,9 @@ def main() -> None:
     parser.add_argument("--kaggle-secret", help="AWS Secrets Manager secret name for Kaggle credentials")
     parser.add_argument("--kaggle-user", help="Explicit Kaggle username override")
     parser.add_argument("--kaggle-key", help="Explicit Kaggle API key override")
+    parser.add_argument(
+        "--git-ssh-secret", help="AWS Secrets Manager secret name holding a GitHub deploy key"
+    )
     parser.add_argument(
         "--region",
         default=os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1")),
@@ -168,18 +238,25 @@ def main() -> None:
 
     resolved_vars: dict[str, str] = {}
 
-    if args.db_secret:
-        db_vars = resolve_db_credentials(args.db_secret, region=args.region)
-        resolved_vars.update(db_vars)
+    try:
+        if args.db_secret:
+            db_vars = resolve_db_credentials(args.db_secret, region=args.region)
+            resolved_vars.update(db_vars)
 
-    if args.kaggle_secret or args.kaggle_user or args.kaggle_key:
-        kaggle_vars = resolve_kaggle_credentials(
-            secret_name=args.kaggle_secret,
-            username=args.kaggle_user,
-            key=args.kaggle_key,
-            region=args.region,
-        )
-        resolved_vars.update(kaggle_vars)
+        if args.kaggle_secret or args.kaggle_user or args.kaggle_key:
+            kaggle_vars = resolve_kaggle_credentials(
+                secret_name=args.kaggle_secret,
+                username=args.kaggle_user,
+                key=args.kaggle_key,
+                region=args.region,
+            )
+            resolved_vars.update(kaggle_vars)
+
+        if args.git_ssh_secret:
+            resolved_vars.update(resolve_git_ssh_key(args.git_ssh_secret, region=args.region))
+    except SecretResolutionError as e:
+        logger.error(str(e))
+        sys.exit(1)
 
     if args.format == "shell":
         out = to_shell_exports(resolved_vars)

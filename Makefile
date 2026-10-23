@@ -101,7 +101,7 @@ ablation-publish:
 
 # On-demand unattended runner (runs pipeline, publishes DVC hash, optional shutdown)
 ablation-job:
-	./scripts/run_ablation_job.sh --experiment $(or $(EXPERIMENT),B2) $(if $(RUN_ID),--run-id $(RUN_ID)) $(if $(SAMPLE_SIZE),--sample-size $(SAMPLE_SIZE)) $(if $(SEED),--seed $(SEED)) $(if $(BRANCH),--branch $(BRANCH)) $(if $(SHUTDOWN),--shutdown) $(if $(KAGGLE_USER),--kaggle-user $(KAGGLE_USER)) $(if $(KAGGLE_SECRET),--kaggle-secret $(KAGGLE_SECRET))
+	./scripts/run_ablation_job.sh --experiment $(or $(EXPERIMENT),B2) $(if $(RUN_ID),--run-id $(RUN_ID)) $(if $(SAMPLE_SIZE),--sample-size $(SAMPLE_SIZE)) $(if $(SEED),--seed $(SEED)) $(if $(BRANCH),--branch $(BRANCH)) $(if $(SHUTDOWN),--shutdown) $(if $(NO_SYNC),--no-sync) $(if $(KAGGLE_USER),--kaggle-user $(KAGGLE_USER)) $(if $(KAGGLE_SECRET),--kaggle-secret $(KAGGLE_SECRET)) $(if $(GIT_SSH_SECRET),--git-ssh-secret $(GIT_SSH_SECRET))
 
 
 # ── Kaggle remote audio generation ────────────────────────────

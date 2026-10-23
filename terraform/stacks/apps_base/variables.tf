@@ -59,3 +59,27 @@ variable "runner_instance_type" {
   default     = "t3.xlarge"
 }
 
+variable "runner_experiment_tag" {
+  description = "Experimento inicial (tag AblationExperiment, p. ej. B2); vacío = sin auto-ejecución"
+  type        = string
+  default     = ""
+}
+
+variable "runner_git_branch" {
+  description = "Rama que el runner ejecuta y donde publica resultados"
+  type        = string
+  default     = "ablations-experiments"
+}
+
+variable "runner_kaggle_secret_name" {
+  description = "Secreto de Secrets Manager con credenciales de Kaggle ({\"username\",\"key\"})"
+  type        = string
+  default     = ""
+}
+
+variable "runner_git_ssh_secret_name" {
+  description = "Secreto de Secrets Manager con la deploy key de GitHub (escritura) para publicar resultados"
+  type        = string
+  default     = ""
+}
+

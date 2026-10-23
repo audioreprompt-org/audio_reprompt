@@ -15,5 +15,8 @@ output "start_command" {
 
 output "ssm_trigger_command" {
   description = "AWS SSM command to trigger an ablation run without SSH keys"
-  value       = "aws ssm send-command --instance-ids ${aws_instance.runner.id} --document-name 'AWS-RunShellScript' --parameters 'commands=[\"sudo -u ubuntu /opt/audio_reprompt/scripts/run_ablation_job.sh --experiment B2 --shutdown\"]'"
+  # Goes through systemd (env file, isolation, journald) and returns at once,
+  # so SSM's 1h executionTimeout never kills the job. Follow logs with:
+  #   journalctl -u ablation@B2 -f
+  value = "aws ssm send-command --instance-ids ${aws_instance.runner.id} --document-name 'AWS-RunShellScript' --parameters 'commands=[\"systemctl start --no-block ablation@B2.service\"]'"
 }

@@ -1,0 +1,90 @@
+#cloud-config
+# ──────────────────────────────────────────────────────────────────────────────
+# cloud-init configuration for Audio Reprompt Ablation Runner VM on AWS EC2
+#
+# Rendered by Terraform `templatefile()` (terraform/modules/ec2_runner).
+# Shell code below uses plain $VAR (no braces) so it passes through untouched.
+#
+# Lifecycle:
+#   * First boot  → provision (uv, clone, uv sync, install systemd units from
+#                   the repo) and kick the auto-trigger once.
+#   * Every boot  → ablation-autostart.service (enabled here) reads the
+#                   `AblationExperiment` instance tag via IMDSv2 and starts
+#                   ablation@<EXP>.service without blocking boot.
+# ──────────────────────────────────────────────────────────────────────────────
+package_update: true
+package_upgrade: true
+
+# NOTE: `awscli` is not packaged for Ubuntu 24.04 (noble); it is installed via
+# snap in runcmd (optional — the pipeline itself only needs boto3).
+packages:
+  - git
+  - rsync
+  - curl
+  - unzip
+  - build-essential
+  - python3-pip
+  - python3-venv
+
+write_files:
+  # Runtime configuration consumed by ablation@.service (EnvironmentFile).
+  # Contains secret *names* only; values are resolved at job time via boto3.
+  - path: /etc/ablation/env
+    permissions: '0644'
+    owner: root:root
+    content: |
+      AWS_REGION=${aws_region}
+      AWS_DEFAULT_REGION=${aws_region}
+      ABLATION_BRANCH=${git_branch}
+      DB_SECRET_NAME=${db_secret_name}
+      KAGGLE_SECRET_NAME=${kaggle_secret_name}
+      GIT_SSH_SECRET_NAME=${git_ssh_secret_name}
+      GIT_PUSH_URL=${git_push_url}
+      GIT_AUTHOR_NAME=${git_author_name}
+      GIT_AUTHOR_EMAIL=${git_author_email}
+      GIT_COMMITTER_NAME=${git_author_name}
+      GIT_COMMITTER_EMAIL=${git_author_email}
+
+  # One-time provisioning script (idempotent; safe to re-run manually).
+  - path: /usr/local/sbin/ablation-bootstrap
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      REPO_DIR=/opt/audio_reprompt
+      REPO_URL='${git_repo_url}'
+      BRANCH='${git_branch}'
+
+      # 1. uv (installed system-wide so both root and ubuntu can use it)
+      if ! command -v uv >/dev/null 2>&1; then
+        curl -LsSf https://astral.sh/uv/install.sh \
+          | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+      fi
+      command -v uv >/dev/null 2>&1 || { echo "uv installation failed" >&2; exit 1; }
+
+      # 2. Clone the repository on the configured branch (public repo → HTTPS)
+      install -d -o ubuntu -g ubuntu "$REPO_DIR"
+      if [ ! -d "$REPO_DIR/.git" ]; then
+        sudo -u ubuntu -H git clone --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
+      fi
+
+      # 3. Pre-sync Python dependencies from the lockfile (no lock rewrites)
+      cd "$REPO_DIR"
+      sudo -u ubuntu -H uv sync --frozen
+
+      # 4. Install systemd units from the repo (single source of truth)
+      install -m 0644 deploy/systemd/ablation@.service /etc/systemd/system/ablation@.service
+      install -m 0644 deploy/systemd/ablation-autostart.service /etc/systemd/system/ablation-autostart.service
+      install -m 0644 deploy/systemd/ablation-idle-guard.service /etc/systemd/system/ablation-idle-guard.service
+      install -m 0644 deploy/systemd/ablation-idle-guard.timer /etc/systemd/system/ablation-idle-guard.timer
+      systemctl daemon-reload
+      systemctl enable ablation-autostart.service
+      systemctl enable --now ablation-idle-guard.timer
+
+runcmd:
+  - [bash, -c, "snap install aws-cli --classic || echo 'aws-cli snap install failed (optional)'"]
+  - [/usr/local/sbin/ablation-bootstrap]
+  # The unit was enabled during this boot, so trigger it once explicitly.
+  # --no-block: never hold cloud-final while a multi-hour job runs.
+  - [systemctl, start, --no-block, ablation-autostart.service]

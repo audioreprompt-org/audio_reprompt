@@ -39,6 +39,48 @@ variable "experiment_tag" {
   default     = ""
 }
 
+variable "kaggle_secret_name" {
+  description = "Secrets Manager secret with Kaggle credentials ({\"username\",\"key\"}); empty = rely on ~/.kaggle/kaggle.json"
+  type        = string
+  default     = ""
+}
+
+variable "git_ssh_secret_name" {
+  description = "Secrets Manager secret holding a GitHub deploy key (write access) used to push results; empty disables git push"
+  type        = string
+  default     = ""
+}
+
+variable "git_repo_url" {
+  description = "Repository URL used to clone/fetch (public repo: HTTPS, no credentials needed)"
+  type        = string
+  default     = "https://github.com/audioreprompt-org/audio_reprompt.git"
+}
+
+variable "git_push_url" {
+  description = "Push URL used together with the deploy key"
+  type        = string
+  default     = "git@github.com:audioreprompt-org/audio_reprompt.git"
+}
+
+variable "git_branch" {
+  description = "Branch the runner checks out, runs and publishes to"
+  type        = string
+  default     = "ablations-experiments"
+}
+
+variable "git_author_name" {
+  description = "Git author/committer name for automated publish commits"
+  type        = string
+  default     = "ablation-bot"
+}
+
+variable "git_author_email" {
+  description = "Git author/committer email for automated publish commits"
+  type        = string
+  default     = "ablation-bot@users.noreply.github.com"
+}
+
 variable "owner" {
   description = "Resource owner tag"
   type        = string

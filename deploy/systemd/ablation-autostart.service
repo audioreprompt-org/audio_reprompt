@@ -1,0 +1,14 @@
+[Unit]
+Description=Audio Reprompt ablation auto-trigger (AblationExperiment instance tag)
+Documentation=https://github.com/audioreprompt-org/audio_reprompt
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ablation/env
+# Starts ablation@<EXP>.service with --no-block and returns immediately.
+ExecStart=/opt/audio_reprompt/scripts/ablation_autostart.sh
+
+[Install]
+WantedBy=multi-user.target

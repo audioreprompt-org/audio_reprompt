@@ -1,3 +1,16 @@
+data "aws_region" "current" {}
+
+locals {
+  # Secrets the runner may read: RDS credentials + optional Kaggle / git deploy key.
+  # Named secrets get a "-*" suffix because Secrets Manager appends a random id to ARNs.
+  runner_secret_arns = compact([
+    var.secret_arn,
+    "arn:aws:secretsmanager:*:*:secret:kaggle-*",
+    var.kaggle_secret_name != "" ? "arn:aws:secretsmanager:*:*:secret:${var.kaggle_secret_name}-*" : "",
+    var.git_ssh_secret_name != "" ? "arn:aws:secretsmanager:*:*:secret:${var.git_ssh_secret_name}-*" : "",
+  ])
+}
+
 data "aws_vpc" "default" {
   default = var.vpc_id == "" ? true : null
   id      = var.vpc_id != "" ? var.vpc_id : null
@@ -64,10 +77,7 @@ resource "aws_iam_policy" "runner_policy" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = [
-          var.secret_arn,
-          "arn:aws:secretsmanager:*:*:secret:kaggle-*"
-        ]
+        Resource = local.runner_secret_arns
       },
       {
         Sid    = "DvcS3Access"
@@ -82,15 +92,9 @@ resource "aws_iam_policy" "runner_policy" {
           var.dvc_s3_bucket_arn,
           "${var.dvc_s3_bucket_arn}/*"
         ]
-      },
-      {
-        Sid    = "EC2TagRead"
-        Effect = "Allow"
-        Action = [
-          "ec2:DescribeTags"
-        ]
-        Resource = "*"
       }
+      # Instance tags are read through IMDS (instance_metadata_tags), so
+      # ec2:DescribeTags is no longer required.
     ]
   })
 }
@@ -143,7 +147,27 @@ resource "aws_instance" "runner" {
     delete_on_termination = true
   }
 
-  user_data = file("${path.module}/../../../deploy/aws/cloud-init.yaml")
+  # IMDSv2 only; expose instance tags to IMDS so the boot-time trigger can read
+  # `AblationExperiment` without the AWS CLI or ec2:DescribeTags.
+  metadata_options {
+    http_endpoint          = "enabled"
+    http_tokens            = "required"
+    instance_metadata_tags = "enabled"
+  }
+
+  user_data = templatefile("${path.module}/../../../deploy/aws/cloud-init.yaml.tftpl", {
+    aws_region          = data.aws_region.current.name
+    db_secret_name      = var.secret_arn
+    kaggle_secret_name  = var.kaggle_secret_name
+    git_ssh_secret_name = var.git_ssh_secret_name
+    git_repo_url        = var.git_repo_url
+    git_push_url        = var.git_ssh_secret_name != "" ? var.git_push_url : ""
+    git_branch          = var.git_branch
+    git_author_name     = var.git_author_name
+    git_author_email    = var.git_author_email
+  })
+  # cloud-init only runs on first boot: recreate the VM when provisioning changes
+  user_data_replace_on_change = true
 
   tags = merge(
     {
@@ -152,4 +176,10 @@ resource "aws_instance" "runner" {
     },
     var.experiment_tag != "" ? { "AblationExperiment" = var.experiment_tag } : {}
   )
+
+  lifecycle {
+    # The experiment tag is switched out-of-band (aws ec2 create-tags) before
+    # each start; don't let `terraform apply` revert it.
+    ignore_changes = [tags["AblationExperiment"]]
+  }
 }

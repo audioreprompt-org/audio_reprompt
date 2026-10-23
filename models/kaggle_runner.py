@@ -22,7 +22,7 @@ Environment:
     KAGGLE_ISOLATE_RUNS   If "1"/"true", every run_id gets its own dataset, kernel and
                           staging dir (safe for concurrent runs); remote copies are
                           deleted after a successful download.
-    KAGGLE_TIMEOUT        Max seconds to wait for the kernel (default: 7200)
+    KAGGLE_TIMEOUT        Max seconds to wait for the kernel (default: 14400)
 """
 
 import argparse
@@ -46,7 +46,7 @@ NB_FILENAME = "ablation-audio-gen.ipynb"
 
 ABLATIONS_AUDIO_PATH = PROJECT_ROOT / "data" / "ablations" / "audio"
 
-DEFAULT_TIMEOUT = int(os.getenv("KAGGLE_TIMEOUT", "7200"))
+DEFAULT_TIMEOUT = int(os.getenv("KAGGLE_TIMEOUT", "14400"))
 ISOLATE_RUNS = os.getenv("KAGGLE_ISOLATE_RUNS", "").strip().lower() in ("1", "true", "yes")
 
 
