@@ -90,12 +90,20 @@ def target_for(run_id: str = "") -> KaggleTarget:
     run id (e.g. ``ablation-audio-gen-r20261022-204000``) so concurrent runs
     never share a dataset, kernel or staging directory.
     """
-    if not (ISOLATE_RUNS and run_id):
-        return DEFAULT_TARGET
+    user = os.getenv("KAGGLE_USERNAME", KAGGLE_USER)
+    isolate = os.getenv("KAGGLE_ISOLATE_RUNS", "").strip().lower() in ("1", "true", "yes") or ISOLATE_RUNS
+    if not (isolate and run_id):
+        return KaggleTarget(
+            dataset_slug=f"{user}/ablation-reprompts",
+            kernel_slug=f"{user}/ablation-audio-gen",
+            kernel_title="Ablation Audio Gen",
+            kernel_id_no=KERNEL_ID_NO if user == "mfreyeso" else None,
+            staging_dir=STAGING_DIR,
+        )
     suffix = run_id.lower().replace("_", "-")
     return KaggleTarget(
-        dataset_slug=f"{KAGGLE_USER}/ablation-reprompts-{suffix}",
-        kernel_slug=f"{KAGGLE_USER}/ablation-audio-gen-{suffix}",
+        dataset_slug=f"{user}/ablation-reprompts-{suffix}",
+        kernel_slug=f"{user}/ablation-audio-gen-{suffix}",
         # Kaggle derives the kernel slug from the title; keep them consistent
         kernel_title=f"Ablation Audio Gen {suffix}",
         kernel_id_no=None,

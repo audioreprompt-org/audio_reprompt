@@ -1,14 +1,15 @@
 data "aws_region" "current" {}
 
 locals {
-  # Secrets the runner may read: RDS credentials + optional Kaggle / git deploy key.
-  # Named secrets get a "-*" suffix because Secrets Manager appends a random id to ARNs.
-  runner_secret_arns = compact([
+  # Secrets the runner may read: RDS credentials + optional Kaggle / git deploy key / LLM keys.
+  # Named secrets get a "*" or "-*" suffix because Secrets Manager appends a random id to ARNs.
+  runner_secret_arns = distinct(compact(concat([
     var.secret_arn,
     "arn:aws:secretsmanager:*:*:secret:kaggle-*",
-    var.kaggle_secret_name != "" ? "arn:aws:secretsmanager:*:*:secret:${var.kaggle_secret_name}-*" : "",
-    var.git_ssh_secret_name != "" ? "arn:aws:secretsmanager:*:*:secret:${var.git_ssh_secret_name}-*" : "",
-  ])
+    var.kaggle_secret_name != "" ? "arn:aws:secretsmanager:*:*:secret:${var.kaggle_secret_name}*" : "",
+    var.git_ssh_secret_name != "" ? "arn:aws:secretsmanager:*:*:secret:${var.git_ssh_secret_name}*" : "",
+    var.llm_secret_name != "" ? "arn:aws:secretsmanager:*:*:secret:${var.llm_secret_name}*" : "",
+  ], var.additional_secret_arns)))
 }
 
 data "aws_vpc" "default" {
@@ -160,6 +161,7 @@ resource "aws_instance" "runner" {
     db_secret_name      = var.secret_arn
     kaggle_secret_name  = var.kaggle_secret_name
     git_ssh_secret_name = var.git_ssh_secret_name
+    llm_secret_name     = var.llm_secret_name
     git_repo_url        = var.git_repo_url
     git_push_url        = var.git_ssh_secret_name != "" ? var.git_push_url : ""
     git_branch          = var.git_branch

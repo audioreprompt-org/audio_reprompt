@@ -38,3 +38,18 @@ output "ec2_runner_ssm_trigger_command" {
   value       = var.enable_ec2_runner ? module.ec2_runner[0].ssm_trigger_command : null
 }
 
+output "kaggle_secret_name" {
+  description = "Nombre del secreto de Kaggle resuelto."
+  value       = module.project_secrets_manager.kaggle_secret_name != "" ? module.project_secrets_manager.kaggle_secret_name : var.runner_kaggle_secret_name
+}
+
+output "git_ssh_secret_name" {
+  description = "Nombre del secreto de Git SSH deploy key resuelto."
+  value       = module.project_secrets_manager.git_ssh_secret_name != "" ? module.project_secrets_manager.git_ssh_secret_name : var.runner_git_ssh_secret_name
+}
+
+output "llm_secret_name" {
+  description = "Nombre del secreto de API keys de LLM resuelto."
+  value       = module.project_secrets_manager.llm_secret_name != "" ? module.project_secrets_manager.llm_secret_name : var.runner_llm_secret_name
+}
+

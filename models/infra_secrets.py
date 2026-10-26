@@ -1,7 +1,7 @@
 """Infrastructure secrets and credentials manager.
 
 Provides reliable, reusable helpers for retrieving and setting up database
-(RDS/PostgreSQL), Kaggle and git (deploy key) credentials from AWS Secrets
+(RDS/PostgreSQL), Kaggle, LLM and git (deploy key) credentials from AWS Secrets
 Manager or environment variables without fragile shell parsing or inline
 python snippets.
 
@@ -173,6 +173,32 @@ def resolve_kaggle_credentials(
     return env_vars
 
 
+def resolve_llm_credentials(
+    secret_name: str | None = None,
+    region: str = "us-east-1",
+) -> dict[str, str]:
+    """Resolve LLM provider API keys from Secrets Manager."""
+    env_vars: dict[str, str] = {}
+    if not secret_name:
+        return env_vars
+
+    data = fetch_secret(secret_name, region)
+    openai_key = data.get("OPENAI_API_KEY") or data.get("openai_api_key") or ""
+    openai_base = data.get("OPENAI_BASE_URL") or data.get("openai_base_url") or ""
+
+    if not openai_key:
+        raise SecretResolutionError(
+            f"LLM secret '{secret_name}' must contain 'OPENAI_API_KEY'"
+        )
+
+    if openai_key:
+        env_vars["OPENAI_API_KEY"] = str(openai_key)
+    if openai_base:
+        env_vars["OPENAI_BASE_URL"] = str(openai_base)
+
+    return env_vars
+
+
 def resolve_git_ssh_key(
     secret_name: str,
     region: str = "us-east-1",
@@ -220,6 +246,10 @@ def main() -> None:
     parser.add_argument("--kaggle-user", help="Explicit Kaggle username override")
     parser.add_argument("--kaggle-key", help="Explicit Kaggle API key override")
     parser.add_argument(
+        "--llm-secret",
+        help="AWS Secrets Manager secret name for LLM API keys (OPENAI_API_KEY)",
+    )
+    parser.add_argument(
         "--git-ssh-secret", help="AWS Secrets Manager secret name holding a GitHub deploy key"
     )
     parser.add_argument(
@@ -251,6 +281,9 @@ def main() -> None:
                 region=args.region,
             )
             resolved_vars.update(kaggle_vars)
+
+        if args.llm_secret:
+            resolved_vars.update(resolve_llm_credentials(args.llm_secret, region=args.region))
 
         if args.git_ssh_secret:
             resolved_vars.update(resolve_git_ssh_key(args.git_ssh_secret, region=args.region))

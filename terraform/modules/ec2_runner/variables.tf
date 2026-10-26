@@ -51,6 +51,18 @@ variable "git_ssh_secret_name" {
   default     = ""
 }
 
+variable "llm_secret_name" {
+  description = "Secrets Manager secret holding LLM API keys ({\"OPENAI_API_KEY\",\"OPENAI_BASE_URL\"})"
+  type        = string
+  default     = ""
+}
+
+variable "additional_secret_arns" {
+  description = "Additional Secrets Manager secret ARNs the runner is allowed to read"
+  type        = list(string)
+  default     = []
+}
+
 variable "git_repo_url" {
   description = "Repository URL used to clone/fetch (public repo: HTTPS, no credentials needed)"
   type        = string

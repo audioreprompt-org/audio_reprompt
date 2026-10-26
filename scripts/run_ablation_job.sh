@@ -23,6 +23,7 @@
 #   ABLATION_BRANCH=...      Branch to sync, run and publish to
 #   DB_SECRET_NAME=...       AWS Secrets Manager secret name/ARN for RDS credentials
 #   KAGGLE_SECRET_NAME=...   AWS Secrets Manager secret name for Kaggle credentials
+#   LLM_SECRET_NAME=...      AWS Secrets Manager secret name for LLM API keys
 #   GIT_SSH_SECRET_NAME=...  AWS Secrets Manager secret holding a GitHub deploy key
 #   GIT_PUSH_URL=...         Push URL used with the deploy key (e.g. git@github.com:org/repo.git)
 #   GIT_AUTHOR_NAME/EMAIL    Commit identity when git user.name/email are not configured
@@ -40,6 +41,7 @@ BRANCH="${ABLATION_BRANCH:-}"
 REMOTE="origin"
 SECRET_NAME="${DB_SECRET_NAME:-}"
 KAGGLE_SECRET_NAME="${KAGGLE_SECRET_NAME:-}"
+LLM_SECRET_NAME="${LLM_SECRET_NAME:-}"
 GIT_SSH_SECRET_NAME="${GIT_SSH_SECRET_NAME:-}"
 KAGGLE_USER_ARG=""
 KAGGLE_KEY_ARG=""
@@ -65,6 +67,7 @@ Options:
       --remote REMOTE        Git remote (default: origin)
       --secret-name NAME     AWS Secrets Manager secret name for RDS database credentials
       --kaggle-secret NAME   AWS Secrets Manager secret name for Kaggle credentials (multi-user)
+      --llm-secret NAME      AWS Secrets Manager secret name for LLM API keys (OpenAI)
       --kaggle-user USER     Kaggle username for this run (overrides environment)
       --kaggle-key KEY       Kaggle API key for this run (overrides environment)
       --git-ssh-secret NAME  AWS Secrets Manager secret holding a GitHub deploy key (for publish)
@@ -85,6 +88,7 @@ while [[ $# -gt 0 ]]; do
     --remote) REMOTE="$2"; shift 2 ;;
     --secret-name) SECRET_NAME="$2"; shift 2 ;;
     --kaggle-secret) KAGGLE_SECRET_NAME="$2"; shift 2 ;;
+    --llm-secret) LLM_SECRET_NAME="$2"; shift 2 ;;
     --kaggle-user) KAGGLE_USER_ARG="$2"; shift 2 ;;
     --kaggle-key) KAGGLE_KEY_ARG="$2"; shift 2 ;;
     --git-ssh-secret) GIT_SSH_SECRET_NAME="$2"; shift 2 ;;
@@ -202,6 +206,7 @@ log "Resolving credentials..."
 SECRETS_EXPORTS=$(uv run --quiet python -m models.infra_secrets \
   ${SECRET_NAME:+--db-secret "$SECRET_NAME"} \
   ${KAGGLE_SECRET_NAME:+--kaggle-secret "$KAGGLE_SECRET_NAME"} \
+  ${LLM_SECRET_NAME:+--llm-secret "$LLM_SECRET_NAME"} \
   ${KAGGLE_USER_ARG:+--kaggle-user "$KAGGLE_USER_ARG"} \
   ${KAGGLE_KEY_ARG:+--kaggle-key "$KAGGLE_KEY_ARG"} \
   ${GIT_SSH_SECRET_NAME:+--git-ssh-secret "$GIT_SSH_SECRET_NAME"}) \
@@ -220,6 +225,11 @@ if [[ -z "${KAGGLE_USERNAME:-}" && ! -f "$HOME/.kaggle/kaggle.json" ]]; then
   die "No Kaggle credentials. Provide KAGGLE_SECRET_NAME / --kaggle-secret or ~/.kaggle/kaggle.json."
 fi
 log "✓ Kaggle account: ${KAGGLE_USERNAME:-<from ~/.kaggle/kaggle.json>} (GPU quota owner)"
+
+if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+  die "No LLM API key set (OPENAI_API_KEY). Provide LLM_SECRET_NAME / --llm-secret or set OPENAI_API_KEY in .env."
+fi
+log "✓ LLM credentials configured"
 
 # Preflight: verify we can commit + push *before* spending hours on the run.
 if [[ "$DO_PUBLISH" -eq 1 ]]; then
@@ -244,8 +254,12 @@ fi
 
 # ── 4. DVC inputs ────────────────────────────────────────────────────────────
 # dvc lives in the uv venv → always invoke it through `uv run`.
-if [[ -f data/prompts.dvc ]] && ! ls data/prompts/user/*.csv >/dev/null 2>&1; then
-  log "Pulling input prompts via DVC..."
+if [[ -f data/raw.dvc ]] && ! ls data/raw/user/*.csv >/dev/null 2>&1; then
+  log "Pulling raw user prompts via DVC (data/raw.dvc)..."
+  uv run --quiet dvc pull data/raw.dvc || die "dvc pull data/raw.dvc failed"
+fi
+if [[ -f data/prompts.dvc ]] && ! ls data/prompts/*.csv >/dev/null 2>&1; then
+  log "Pulling prompts via DVC (data/prompts.dvc)..."
   uv run --quiet dvc pull data/prompts.dvc || die "dvc pull data/prompts.dvc failed"
 fi
 

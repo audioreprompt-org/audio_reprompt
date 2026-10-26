@@ -29,6 +29,7 @@ dependencies = [
     "wordcloud>=1.9.4",
     "statsmodels>=0.14.5",
     "textstat>=0.7.13",
+    "boto3>=1.40.0",
 ]
 
 [build-system]
@@ -43,6 +44,7 @@ exclude = ["tests*"]
 [tool.uv]
 required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
 [dependency-groups]

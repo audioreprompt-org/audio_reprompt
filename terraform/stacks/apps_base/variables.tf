@@ -83,3 +83,42 @@ variable "runner_git_ssh_secret_name" {
   default     = ""
 }
 
+variable "runner_llm_secret_name" {
+  description = "Secreto de Secrets Manager con las API keys de LLM (OPENAI_API_KEY, OPENAI_BASE_URL)"
+  type        = string
+  default     = ""
+}
+
+variable "kaggle_username" {
+  description = "Usuario de Kaggle para almacenar en Secrets Manager"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "kaggle_key" {
+  description = "API Key de Kaggle para almacenar en Secrets Manager"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "git_ssh_private_key" {
+  description = "Clave privada SSH (deploy key) para publicar resultados en GitHub"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "openai_api_key" {
+  description = "API Key de OpenAI / compatible endpoint para almacenar en Secrets Manager"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "openai_base_url" {
+  description = "URL base opcional para el cliente OpenAI"
+  type        = string
+  default     = ""
+}

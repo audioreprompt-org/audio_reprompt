@@ -1,18 +1,61 @@
-# terraform initialize
+# ── Environment & Terraform Configuration ─────────────────────
+-include .env
+
+STACK ?= apps_base
+ENV ?= student1
+ENABLE_EC2_RUNNER ?= true
+
+# Export Terraform variables via TF_VAR_* (avoids multiline/quoting issues on CLI)
+ifneq ($(strip $(GIT_SSH_KEY_PATH)),)
+export TF_VAR_git_ssh_private_key = $(shell cat $(GIT_SSH_KEY_PATH) 2>/dev/null)
+else ifneq ($(strip $(GIT_SSH_PRIVATE_KEY)),)
+export TF_VAR_git_ssh_private_key = $(GIT_SSH_PRIVATE_KEY)
+endif
+
+# Map environment variables (.env) or CLI overrides to Terraform -var flags
+TF_VARS = \
+	-var="enable_ec2_runner=$(ENABLE_EC2_RUNNER)" \
+	$(if $(KAGGLE_SECRET_NAME),-var="runner_kaggle_secret_name=$(KAGGLE_SECRET_NAME)") \
+	$(if $(KAGGLE_USERNAME),-var="kaggle_username=$(KAGGLE_USERNAME)") \
+	$(if $(KAGGLE_KEY),-var="kaggle_key=$(KAGGLE_KEY)") \
+	$(if $(GIT_SSH_SECRET_NAME),-var="runner_git_ssh_secret_name=$(GIT_SSH_SECRET_NAME)") \
+	$(if $(LLM_SECRET_NAME),-var="runner_llm_secret_name=$(LLM_SECRET_NAME)") \
+	$(if $(OPENAI_API_KEY),-var="openai_api_key=$(OPENAI_API_KEY)") \
+	$(if $(OPENAI_BASE_URL),-var="openai_base_url=$(OPENAI_BASE_URL)") \
+	$(if $(EXPERIMENT),-var="runner_experiment_tag=$(EXPERIMENT)") \
+	$(if $(BRANCH),-var="runner_git_branch=$(BRANCH)") \
+	$(EXTRA_TF_VARS)
+
+# Terraform core targets
 init:
-	terraform -chdir=$(shell pwd)/terraform/stacks/${STACK} init -backend-config=$(shell pwd)/terraform/environments/${ENV}/${STACK}/backend.tfvars
+	terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) init -backend-config=$(CURDIR)/terraform/environments/$(ENV)/$(STACK)/backend.tfvars
 
-# terraform plan and create a plan file
-plan:init
-	terraform -chdir=$(shell pwd)/terraform/stacks/${STACK} plan -var-file=$(shell pwd)/terraform/environments/${ENV}/${STACK}/terraform.tfvars -out=.tfplan
+plan: init
+	terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) plan \
+		-var-file=$(CURDIR)/terraform/environments/$(ENV)/$(STACK)/terraform.tfvars \
+		$(TF_VARS) \
+		-out=.tfplan
 
-# apply the created plan file
-apply:plan
-	terraform -chdir=$(shell pwd)/terraform/stacks/${STACK} apply .tfplan
+apply: plan
+	terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) apply .tfplan
 
-# terraform destroy all resources
 destroy:
-	terraform -chdir=$(shell pwd)/terraform/stacks/${STACK} destroy -var-file=$(shell pwd)/terraform/environments/${ENV}/${STACK}/terraform.tfvars
+	terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) destroy \
+		-var-file=$(CURDIR)/terraform/environments/$(ENV)/$(STACK)/terraform.tfvars \
+		$(TF_VARS)
+
+# ── Ablation EC2 Runner Deployment ───────────────────────────
+# Despliega RDS + Secrets Manager + EC2 Runner en apps_base
+ablation-deploy: apply
+
+# Muestra outputs (ID de la instancia EC2, comando SSM, comando de inicio)
+ablation-deploy-output:
+	terraform -chdir=$(CURDIR)/terraform/stacks/apps_base output
+
+# Destruye la infraestructura desplegada
+ablation-destroy: destroy
+
+
 
 # Build the python distribution wheel for the models
 build-reprompt:
@@ -101,7 +144,7 @@ ablation-publish:
 
 # On-demand unattended runner (runs pipeline, publishes DVC hash, optional shutdown)
 ablation-job:
-	./scripts/run_ablation_job.sh --experiment $(or $(EXPERIMENT),B2) $(if $(RUN_ID),--run-id $(RUN_ID)) $(if $(SAMPLE_SIZE),--sample-size $(SAMPLE_SIZE)) $(if $(SEED),--seed $(SEED)) $(if $(BRANCH),--branch $(BRANCH)) $(if $(SHUTDOWN),--shutdown) $(if $(NO_SYNC),--no-sync) $(if $(KAGGLE_USER),--kaggle-user $(KAGGLE_USER)) $(if $(KAGGLE_SECRET),--kaggle-secret $(KAGGLE_SECRET)) $(if $(GIT_SSH_SECRET),--git-ssh-secret $(GIT_SSH_SECRET))
+	./scripts/run_ablation_job.sh --experiment $(or $(EXPERIMENT),B2) $(if $(RUN_ID),--run-id $(RUN_ID)) $(if $(SAMPLE_SIZE),--sample-size $(SAMPLE_SIZE)) $(if $(SEED),--seed $(SEED)) $(if $(BRANCH),--branch $(BRANCH)) $(if $(SHUTDOWN),--shutdown) $(if $(NO_SYNC),--no-sync) $(if $(NO_PUBLISH),--no-publish) $(if $(DB_SECRET_NAME),--secret-name $(DB_SECRET_NAME)) $(if $(KAGGLE_USER),--kaggle-user $(KAGGLE_USER)) $(if $(or $(KAGGLE_SECRET_NAME),$(KAGGLE_SECRET)),--kaggle-secret $(or $(KAGGLE_SECRET_NAME),$(KAGGLE_SECRET))) $(if $(or $(GIT_SSH_SECRET_NAME),$(GIT_SSH_SECRET)),--git-ssh-secret $(or $(GIT_SSH_SECRET_NAME),$(GIT_SSH_SECRET))) $(if $(LLM_SECRET_NAME),--llm-secret $(LLM_SECRET_NAME))
 
 
 # ── Kaggle remote audio generation ────────────────────────────

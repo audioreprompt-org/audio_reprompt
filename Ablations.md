@@ -6,6 +6,7 @@
   - [Flujo Desatendido End-to-End](#flujo-desatendido-end-to-end)
   - [Protección contra Costos y Guard de Inactividad](#protección-contra-costos-y-guard-de-inactividad)
 - [Instrucciones para Ejecutar un Job](#instrucciones-para-ejecutar-un-job)
+  - [Paso 0: Despliegue de Infraestructura con Terraform (apps_base)](#paso-0-despliegue-de-infraestructura-con-terraform-apps_base)
   - [Opción 1: On-Demand vía Tag de EC2 (Recomendada)](#opción-1-on-demand-vía-tag-de-ec2-recomendada)
   - [Opción 2: On-Demand vía AWS SSM (Sin SSH)](#opción-2-on-demand-vía-aws-ssm-sin-ssh)
   - [Opción 3: Ejecución Local / Workstation](#opción-3-ejecución-local--workstation)
@@ -91,6 +92,48 @@ Para evitar cobros accidentales por instancias olvidadas o procesos colgados:
 ---
 
 ## Instrucciones para Ejecutar un Job
+
+### Paso 0: Despliegue de Infraestructura con Terraform (apps_base)
+
+Antes de iniciar jobs remotos, la infraestructura en AWS (PostgreSQL RDS, la instancia EC2 Runner y los secretos de AWS Secrets Manager para **DB**, **Kaggle**, **Git SSH deploy key** y **claves de API de LLM** (`OPENAI_API_KEY`) debe estar desplegada. Para ello se utiliza el comando simplificado en Make:
+
+```bash
+# Desplegar la infraestructura (habilita automáticamente el EC2 runner y provisiona secretos)
+make ablation-deploy
+```
+
+#### ¿Cómo pasar variables de entorno?
+El comando soporta tres formas sencillas de configuración según tu preferencia:
+
+1. **Automático desde `.env`**:
+   El `Makefile` carga tu archivo `.env` automáticamente. Las siguientes variables se transmiten de forma directa a Terraform:
+   - `KAGGLE_USERNAME` y `KAGGLE_KEY`: Crea y gestiona el secreto de Kaggle (nombre personalizado opcional mediante `KAGGLE_SECRET_NAME`).
+   - `GIT_SSH_KEY_PATH` (ruta al archivo de clave privada deploy key, ej. `~/.ssh/ablation_deploy_key`) o `GIT_SSH_PRIVATE_KEY`: Crea el secreto SSH para clonar/publicar repositorios privados (nombre personalizado opcional mediante `GIT_SSH_SECRET_NAME`).
+   - `OPENAI_API_KEY`, `OPENAI_BASE_URL` (opcional): Crea el secreto de LLMs (nombre personalizado opcional mediante `LLM_SECRET_NAME`).
+   - `EXPERIMENT`: Tag inicial opcional `AblationExperiment` para la instancia runner.
+   - `BRANCH`: Rama git objetivo para el runner (por defecto `ablations-experiments`).
+2. **Parámetros en la invocación de Make**:
+   Puedes sobreescribir variables puntuales en la línea de comando:
+   ```bash
+   make ablation-deploy EXPERIMENT=B2 KAGGLE_SECRET_NAME=kaggle-mfreyeso
+   ```
+3. **Variables estándar de Terraform (`TF_VAR_*`)**:
+   Terraform reconoce cualquier variable exportada en tu shell con el prefijo `TF_VAR_`:
+   ```bash
+   export TF_VAR_runner_instance_type="t3.xlarge"
+   make ablation-deploy
+   ```
+
+#### Obtener el ID de la instancia creada
+Una vez completado el despliegue, consulta los identificadores generados:
+```bash
+make ablation-deploy-output
+```
+Copia el valor de `ec2_runner_instance_id` para los siguientes pasos.
+
+*(Nota: Para destruir los recursos en AWS cuando termines todas tus pruebas, usa `make ablation-destroy`).*
+
+---
 
 ### Opción 1: On-Demand vía Tag de EC2 (Recomendada)
 
@@ -221,7 +264,7 @@ Manejada por `mcu_reprompt()` en `models/music_curator/kimi_mcu.py`.
 #### Pre-requisitos
 - PostgreSQL con tabla `crossmodal_food_embeddings` poblada.
 - Modelo `all-MiniLM-L6-v2` disponible.
-- API keys en `.env`: `MOONSHOT_API_KEY` y `OPENAI_API_KEY`.
+- API keys en `.env`: `OPENAI_API_KEY`.
 - Prompts en `data/raw/user/raw_prompts.csv`.
 - Las 4 versiones definidas en `models/music_curator/prompts.py`.
 
@@ -335,6 +378,11 @@ El análisis genera:
 ```bash
 # Listar experimentos disponibles
 make ablation-list
+
+# ── Despliegue de Infraestructura en AWS (apps_base) ──
+make ablation-deploy                         # Despliega RDS + Secrets Manager + EC2 Runner
+make ablation-deploy-output                  # Muestra outputs (Instance ID, comandos SSM)
+make ablation-destroy                        # Destruye la infraestructura desplegada
 
 # ── Ejecución desatendida / orquestada (recomendada) ──
 make ablation-job EXPERIMENT=B2              # corre pipeline completo + publica en DVC/git
