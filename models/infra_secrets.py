@@ -16,6 +16,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -199,6 +200,22 @@ def resolve_llm_credentials(
     return env_vars
 
 
+def _normalize_private_key(raw: str) -> str:
+    """Normalize an OpenSSH/PEM private key, repairing escaped or space-flattened newlines."""
+    text = raw.strip().replace("\r\n", "\n").replace("\\n", "\n")
+    m = re.match(
+        r"^(-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----)\s+(.*?)\s+(-----END [A-Z0-9 ]*PRIVATE KEY-----)$",
+        text,
+        re.DOTALL,
+    )
+    if m:
+        header, body, footer = m.group(1), m.group(2), m.group(3)
+        # If Make's $(shell cat ...) flattened newlines into spaces, split tokens back onto lines
+        body_lines = [tok for tok in re.split(r"\s+", body.strip()) if tok]
+        return "\n".join([header, *body_lines, footer])
+    return text
+
+
 def resolve_git_ssh_key(
     secret_name: str,
     region: str = "us-east-1",
@@ -219,14 +236,16 @@ def resolve_git_ssh_key(
     if "PRIVATE KEY" not in raw:
         raise SecretResolutionError(f"Git SSH secret '{secret_name}' does not contain a private key")
 
+    normalized = _normalize_private_key(raw)
+
     key_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     key_path.touch(mode=0o600, exist_ok=True)
     key_path.chmod(0o600)
-    key_path.write_text(raw + "\n")  # OpenSSH requires a trailing newline
+    key_path.write_text(normalized + "\n")  # OpenSSH requires a trailing newline
 
     ssh_cmd = (
         f"ssh -i {shlex.quote(str(key_path))} -o IdentitiesOnly=yes "
-        "-o StrictHostKeyChecking=accept-new"
+        "-o BatchMode=yes -o StrictHostKeyChecking=accept-new"
     )
     return {"GIT_SSH_COMMAND": ssh_cmd}
 

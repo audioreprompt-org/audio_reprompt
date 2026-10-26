@@ -178,10 +178,4 @@ resource "aws_instance" "runner" {
     },
     var.experiment_tag != "" ? { "AblationExperiment" = var.experiment_tag } : {}
   )
-
-  lifecycle {
-    # The experiment tag is switched out-of-band (aws ec2 create-tags) before
-    # each start; don't let `terraform apply` revert it.
-    ignore_changes = [tags["AblationExperiment"]]
-  }
 }

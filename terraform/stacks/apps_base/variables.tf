@@ -63,6 +63,11 @@ variable "runner_experiment_tag" {
   description = "Experimento inicial (tag AblationExperiment, p. ej. B2); vacío = sin auto-ejecución"
   type        = string
   default     = ""
+
+  validation {
+    condition     = contains(["", "all", "generation", "B1", "B2", "B3", "B1a", "B1b", "B1c", "B1d", "B2a", "B2b", "B3a", "B3b", "B3c", "B3d", "B3e"], var.runner_experiment_tag)
+    error_message = "runner_experiment_tag debe ser vacío o un ID de experimento válido (B1, B2, B3, B1a-B1d, B2a-B2b, B3a-B3e, all, generation)."
+  }
 }
 
 variable "runner_git_branch" {

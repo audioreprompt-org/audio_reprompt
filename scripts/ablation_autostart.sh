@@ -36,10 +36,14 @@ if [[ -z "$EXP" ]]; then
   exit 0
 fi
 
-if [[ ! "$EXP" =~ ^[A-Za-z0-9]+$ ]]; then
-  log "Invalid '$TAG_KEY' value '$EXP' (expected e.g. B1, B2, B3a)."
-  exit 1
-fi
+case "$EXP" in
+  all|generation|B1|B2|B3|B1[a-d]|B2[a-b]|B3[a-e])
+    ;;
+  *)
+    log "Invalid '$TAG_KEY' value '$EXP' (expected B1, B2, B3, B1a-B1d, B2a-B2b, B3a-B3e, all, or generation); skipping auto-trigger."
+    exit 0
+    ;;
+esac
 
 log "Found $TAG_KEY=$EXP → starting ablation@$EXP.service"
 systemctl start --no-block "ablation@$EXP.service"

@@ -149,18 +149,21 @@ sync_code() {
   git fetch --quiet "$REMOTE" "+refs/heads/$BRANCH:refs/remotes/$REMOTE/$BRANCH" \
     || die "git fetch failed for $REMOTE/$BRANCH"
 
-  if ! git diff --quiet || ! git diff --cached --quiet; then
-    die "Working tree has uncommitted changes; commit/stash them or pass --no-sync."
-  fi
-  if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
-    local ahead
-    ahead="$(git rev-list --count "$REMOTE/$BRANCH..refs/heads/$BRANCH")"
-    if [[ "$ahead" -ne 0 ]]; then
-      die "Local $BRANCH has $ahead unpushed commit(s); push them or pass --no-sync."
+  if [[ "$SHUTDOWN" -ne 1 ]]; then
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+      die "Working tree has uncommitted changes; commit/stash them or pass --no-sync."
+    fi
+    if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
+      local ahead
+      ahead="$(git rev-list --count "$REMOTE/$BRANCH..refs/heads/$BRANCH")"
+      if [[ "$ahead" -ne 0 ]]; then
+        die "Local $BRANCH has $ahead unpushed commit(s); push them or pass --no-sync."
+      fi
     fi
   fi
 
-  git checkout --quiet -B "$BRANCH" "$REMOTE/$BRANCH"
+  git checkout --quiet -f -B "$BRANCH" "$REMOTE/$BRANCH"
+  git reset --hard --quiet "$REMOTE/$BRANCH"
   log "✓ Checked out $BRANCH @ $(git rev-parse --short HEAD)"
 
   # --frozen: never rewrite uv.lock (a dirty tree would block publishing)

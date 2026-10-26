@@ -5,11 +5,15 @@ STACK ?= apps_base
 ENV ?= student1
 ENABLE_EC2_RUNNER ?= true
 
-# Export Terraform variables via TF_VAR_* (avoids multiline/quoting issues on CLI)
+# Pass GIT_SSH_PRIVATE_KEY via shell env inside recipes (avoid GNU Make $(shell cat ...),
+# which converts all newlines in the SSH private key into spaces and breaks libcrypto).
 ifneq ($(strip $(GIT_SSH_KEY_PATH)),)
-export TF_VAR_git_ssh_private_key = $(shell cat $(GIT_SSH_KEY_PATH) 2>/dev/null)
+GIT_SSH_ENV = TF_VAR_git_ssh_private_key="$$(cat $(GIT_SSH_KEY_PATH))"
 else ifneq ($(strip $(GIT_SSH_PRIVATE_KEY)),)
 export TF_VAR_git_ssh_private_key = $(GIT_SSH_PRIVATE_KEY)
+GIT_SSH_ENV =
+else
+GIT_SSH_ENV =
 endif
 
 # Map environment variables (.env) or CLI overrides to Terraform -var flags
@@ -31,7 +35,7 @@ init:
 	terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) init -backend-config=$(CURDIR)/terraform/environments/$(ENV)/$(STACK)/backend.tfvars
 
 plan: init
-	terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) plan \
+	$(GIT_SSH_ENV) terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) plan \
 		-var-file=$(CURDIR)/terraform/environments/$(ENV)/$(STACK)/terraform.tfvars \
 		$(TF_VARS) \
 		-out=.tfplan
@@ -40,7 +44,7 @@ apply: plan
 	terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) apply .tfplan
 
 destroy:
-	terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) destroy \
+	$(GIT_SSH_ENV) terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) destroy \
 		-var-file=$(CURDIR)/terraform/environments/$(ENV)/$(STACK)/terraform.tfvars \
 		$(TF_VARS)
 

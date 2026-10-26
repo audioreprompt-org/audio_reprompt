@@ -110,7 +110,7 @@ El comando soporta tres formas sencillas de configuración según tu preferencia
    - `KAGGLE_USERNAME` y `KAGGLE_KEY`: Crea y gestiona el secreto de Kaggle (nombre personalizado opcional mediante `KAGGLE_SECRET_NAME`).
    - `GIT_SSH_KEY_PATH` (ruta al archivo de clave privada deploy key, ej. `~/.ssh/ablation_deploy_key`) o `GIT_SSH_PRIVATE_KEY`: Crea el secreto SSH para clonar/publicar repositorios privados (nombre personalizado opcional mediante `GIT_SSH_SECRET_NAME`).
    - `OPENAI_API_KEY`, `OPENAI_BASE_URL` (opcional): Crea el secreto de LLMs (nombre personalizado opcional mediante `LLM_SECRET_NAME`).
-   - `EXPERIMENT`: Tag inicial opcional `AblationExperiment` para la instancia runner.
+   - `EXPERIMENT`: Experimento que el runner ejecutará automáticamente al encender (tag `AblationExperiment`: `B1`, `B2`, `B3`, `B1a`–`B1d`, `B2a`–`B2b`, `B3a`–`B3e`, `all`, `generation`, o vacío para no auto-ejecutar).
    - `BRANCH`: Rama git objetivo para el runner (por defecto `ablations-experiments`).
 2. **Parámetros en la invocación de Make**:
    Puedes sobreescribir variables puntuales en la línea de comando:
@@ -137,16 +137,24 @@ Copia el valor de `ec2_runner_instance_id` para los siguientes pasos.
 
 ### Opción 1: On-Demand vía Tag de EC2 (Recomendada)
 
-Este método es 100% desatendido: no requiere conectarse a la máquina ni abrir terminales SSH.
+Este método es 100% desatendido: no requiere conectarse a la máquina ni abrir terminales SSH. Cuando ejecutas `make ablation-deploy`, la instancia EC2 se crea, **se enciende automáticamente** y ejecuta el experimento configurado en `EXPERIMENT` (en tu `.env` o por CLI) y luego se apaga sola (`stopped`) al finalizar.
 
-1. **Asignar el tag del experimento deseado** a la instancia EC2 (`B1`, `B2`, `B3`):
+Para ejecuciones posteriores (cuando la VM ya está apagada):
+
+1. **Configurar o cambiar el experimento a ejecutar** (`B1`, `B2`, `B3`, o variante como `B2a`):
+   * **Vía `.env` / Terraform** (actualiza `EXPERIMENT` en `.env` o pásalo por CLI):
+     ```bash
+     make ablation-deploy EXPERIMENT=B2
+     ```
+   * **O directamente vía AWS CLI** (sin correr Terraform entre ejecuciones):
+     ```bash
+     INSTANCE_ID="<id-de-la-instancia-runner>"
+     aws ec2 create-tags --resources "$INSTANCE_ID" --tags Key=AblationExperiment,Value=B2
+     ```
+
+2. **Encender la instancia** (si está en estado `stopped`):
    ```bash
    INSTANCE_ID="<id-de-la-instancia-runner>"
-   aws ec2 create-tags --resources "$INSTANCE_ID" --tags Key=AblationExperiment,Value=B2
-   ```
-
-2. **Encender la instancia**:
-   ```bash
    aws ec2 start-instances --instance-ids "$INSTANCE_ID"
    ```
 
