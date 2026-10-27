@@ -112,16 +112,19 @@ def target_for(run_id: str = "") -> KaggleTarget:
     )
 
 
-def _run_kaggle(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+def _run_kaggle(
+    *args: str, check: bool = True, quiet_error: bool = False
+) -> subprocess.CompletedProcess:
     """Run a kaggle CLI command."""
     cmd = ["kaggle", *args]
     print(f"  $ {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        if result.stderr:
-            print(f"  ✗ stderr: {result.stderr.strip()}", file=sys.stderr)
-        if result.stdout:
-            print(f"  ✗ stdout: {result.stdout.strip()}", file=sys.stderr)
+        if not quiet_error:
+            if result.stderr:
+                print(f"  ✗ stderr: {result.stderr.strip()}", file=sys.stderr)
+            if result.stdout:
+                print(f"  ✗ stdout: {result.stdout.strip()}", file=sys.stderr)
         if check:
             raise subprocess.CalledProcessError(
                 result.returncode, cmd, result.stdout, result.stderr
@@ -161,25 +164,92 @@ def _write_dataset_metadata(target: KaggleTarget = DEFAULT_TARGET) -> None:
     print(f"  Dataset metadata written to {meta_path}")
 
 
-def _wait_for_dataset_ready(
-    target: KaggleTarget, interval: int = 15, timeout: int = 600
-) -> None:
-    """Poll ``kaggle datasets status`` until the new version is ready.
+def _dataset_files_ready(
+    target: KaggleTarget, expected_files: list[str] | None = None
+) -> bool:
+    """Check whether the uploaded CSV files are listed in ``kaggle datasets files``."""
+    files_res = _run_kaggle(
+        "datasets", "files", target.dataset_slug, "--csv", check=False, quiet_error=True
+    )
+    if files_res.returncode != 0:
+        return False
+    out = files_res.stdout.strip()
+    out_lower = out.lower()
+    if not out or "no files found" in out_lower or "error" in out_lower:
+        return False
+    if expected_files:
+        return all(fname in out for fname in expected_files)
+    return ".csv" in out_lower
 
-    Replaces a fixed sleep, which raced with Kaggle's processing time.
+
+def _dataset_visible_in_list(target: KaggleTarget) -> bool:
+    """Check whether the dataset appears in ``kaggle datasets list --mine``."""
+    list_res = _run_kaggle(
+        "datasets",
+        "list",
+        "--mine",
+        "--search",
+        target.dataset_name,
+        "--csv",
+        check=False,
+        quiet_error=True,
+    )
+    if list_res.returncode != 0:
+        return False
+    return target.dataset_slug.lower() in list_res.stdout.lower()
+
+
+def _wait_for_dataset_ready(
+    target: KaggleTarget,
+    expected_files: list[str] | None = None,
+    interval: int = 15,
+    timeout: int = 600,
+) -> None:
+    """Poll until the Kaggle dataset version is processed and ready for kernels.
+
+    Handles ``GetDatasetStatus`` returning ``403 Forbidden`` (which Kaggle
+    returns for newly created private datasets while ACLs/databundles initialize
+    or when the endpoint is restricted) by falling back to ``datasets files``
+    and ``datasets list --mine`` instead of treating HTTP error text (``403
+    Client Error``) as a dataset processing failure.
     """
     print(f"  ⏳ Waiting for dataset {target.dataset_slug} to be ready...")
     elapsed = 0
     while elapsed < timeout:
-        result = _run_kaggle("datasets", "status", target.dataset_slug, check=False)
-        status = result.stdout.strip().lower()
-        if "ready" in status:
-            # small grace period so the version is visible to kernels
-            time.sleep(interval)
-            print(f"  ✓ Dataset ready after ~{elapsed + interval}s")
-            return
-        if "error" in status:
-            raise RuntimeError(f"Kaggle dataset processing failed: {status}")
+        result = _run_kaggle(
+            "datasets", "status", target.dataset_slug, check=False, quiet_error=True
+        )
+        if result.returncode == 0:
+            status = result.stdout.strip().lower()
+            if "ready" in status:
+                # small grace period so the version is visible to kernels
+                time.sleep(interval)
+                print(f"  ✓ Dataset ready after ~{elapsed + interval}s")
+                return
+            if status in ("failed", "deleted"):
+                raise RuntimeError(f"Kaggle dataset processing failed: {status}")
+            print(f"  … Dataset status: {status or 'pending'} ({elapsed}s elapsed)")
+        else:
+            # GetDatasetStatus often returns 403 Forbidden on newly created private
+            # datasets; fall back to checking whether the uploaded files are listed.
+            if _dataset_files_ready(target, expected_files):
+                time.sleep(interval)
+                print(
+                    f"  ✓ Dataset ready (verified via dataset files) after ~{elapsed + interval}s"
+                )
+                return
+            if elapsed >= interval * 2 and _dataset_visible_in_list(target):
+                time.sleep(interval)
+                print(
+                    f"  ✓ Dataset ready (verified via datasets list --mine) after ~{elapsed + interval}s"
+                )
+                return
+            err_summary = (result.stdout or result.stderr).strip().splitlines()
+            first_line = err_summary[0] if err_summary else f"exit {result.returncode}"
+            print(
+                f"  … Dataset not ready yet ({first_line}; {elapsed}s elapsed, retrying in {interval}s)"
+            )
+
         time.sleep(interval)
         elapsed += interval
     print(
@@ -201,7 +271,9 @@ def _upload_dataset(target: KaggleTarget = DEFAULT_TARGET) -> None:
     local_csvs = sorted(p.name for p in target.dataset_dir.glob("*.csv"))
 
     if target.isolated:
-        _run_kaggle("datasets", "create", "-p", str(target.dataset_dir), "-q")
+        create_res = _run_kaggle("datasets", "create", "-p", str(target.dataset_dir), "-q")
+        if "dataset creation error" in create_res.stdout.lower():
+            raise RuntimeError(f"Error creating Kaggle dataset: {create_res.stdout.strip()}")
     else:
         # Try creating a new version first (common case — dataset already exists)
         result = _run_kaggle(
@@ -216,22 +288,30 @@ def _upload_dataset(target: KaggleTarget = DEFAULT_TARGET) -> None:
             check=False,
         )
 
-        if result.returncode != 0:
-            combined = (result.stdout + result.stderr).lower()
-            if "not found" in combined or "does not exist" in combined or "404" in combined:
+        combined = (result.stdout + result.stderr).lower()
+        if result.returncode != 0 or "dataset version creation error" in combined:
+            if (
+                "not found" in combined
+                or "does not exist" in combined
+                or "404" in combined
+                or "403" in combined
+            ):
                 print("  Dataset does not exist, creating...")
-                _run_kaggle("datasets", "create", "-p", str(target.dataset_dir), "-q")
+                create_res = _run_kaggle("datasets", "create", "-p", str(target.dataset_dir), "-q")
+                if "dataset creation error" in create_res.stdout.lower():
+                    raise RuntimeError(f"Error creating Kaggle dataset: {create_res.stdout.strip()}")
             else:
-                raise RuntimeError(f"Error updating Kaggle dataset: {result.stderr.strip()}")
+                err_msg = (result.stderr or result.stdout).strip()
+                raise RuntimeError(f"Error updating Kaggle dataset: {err_msg}")
 
     print(f"  ✓ Dataset uploaded: {target.dataset_slug}")
     print(f"  ℹ Local CSVs: {local_csvs}")
 
     # Wait for new dataset version to propagate to kernels
-    _wait_for_dataset_ready(target)
+    _wait_for_dataset_ready(target, expected_files=local_csvs)
 
     # Verify remote files match what we uploaded
-    verify = _run_kaggle("datasets", "files", target.dataset_slug, check=False)
+    verify = _run_kaggle("datasets", "files", target.dataset_slug, check=False, quiet_error=True)
     if verify.returncode == 0:
         print(f"  ℹ Remote dataset files:\n{verify.stdout.strip()}")
         # Quick sanity check: make sure all local CSV names appear in remote listing
@@ -401,17 +481,35 @@ def _write_kernel_metadata(target: KaggleTarget = DEFAULT_TARGET) -> None:
     print(f"  Kernel metadata written to {meta_path}")
 
 
-def _push_kernel(target: KaggleTarget = DEFAULT_TARGET) -> None:
-    """Push the notebook to Kaggle for execution."""
+def _push_kernel(
+    target: KaggleTarget = DEFAULT_TARGET, max_retries: int = 5, retry_delay: int = 15
+) -> None:
+    """Push the notebook to Kaggle for execution, retrying if dataset propagation lags."""
     _generate_notebook(target)
     _write_kernel_metadata(target)
-    _run_kaggle("kernels", "push", "-p", str(target.kernel_dir))
+    for attempt in range(1, max_retries + 1):
+        res = _run_kaggle("kernels", "push", "-p", str(target.kernel_dir))
+        out_lower = res.stdout.lower()
+        if "not valid dataset sources" in out_lower:
+            if attempt < max_retries:
+                print(
+                    f"  ⏳ Dataset {target.dataset_slug} not yet visible to Kernels API "
+                    f"(attempt {attempt}/{max_retries}); retrying in {retry_delay}s..."
+                )
+                time.sleep(retry_delay)
+                continue
+            raise RuntimeError(
+                f"Kaggle kernel push could not attach dataset {target.dataset_slug}: {res.stdout.strip()}"
+            )
+        if "kernel push error" in out_lower:
+            raise RuntimeError(f"Kaggle kernel push failed: {res.stdout.strip()}")
+        break
     print(f"  ✓ Kernel pushed: {target.kernel_slug}")
 
 
 def _check_status(target: KaggleTarget = DEFAULT_TARGET) -> str:
     """Check the kernel execution status."""
-    result = _run_kaggle("kernels", "status", target.kernel_slug, check=False)
+    result = _run_kaggle("kernels", "status", target.kernel_slug, check=False, quiet_error=True)
     output = result.stdout.strip()
     print(f"  Status: {output}")
     return output
@@ -427,15 +525,25 @@ def _poll_until_complete(
     print(f"  Polling every {interval}s (timeout: {timeout}s)...")
 
     while elapsed < timeout:
-        status = _check_status(target)
+        result = _run_kaggle(
+            "kernels", "status", target.kernel_slug, check=False, quiet_error=True
+        )
+        status = result.stdout.strip()
+        print(f"  Status: {status}")
         status_lower = status.lower()
 
-        if "complete" in status_lower:
-            print("  ✓ Kernel execution completed!")
-            return True
-        if "error" in status_lower or "cancel" in status_lower:
-            print(f"  ✗ Kernel failed: {status}", file=sys.stderr)
-            return False
+        if result.returncode == 0:
+            if "complete" in status_lower:
+                print("  ✓ Kernel execution completed!")
+                return True
+            if "error" in status_lower or "cancel" in status_lower:
+                print(f"  ✗ Kernel failed: {status}", file=sys.stderr)
+                return False
+        else:
+            print(
+                f"  ⚠ Transient error checking kernel status (exit {result.returncode}); will retry...",
+                file=sys.stderr,
+            )
 
         time.sleep(interval)
         elapsed += interval
