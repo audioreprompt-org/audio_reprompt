@@ -7,8 +7,8 @@
   - [Protección contra Costos y Guard de Inactividad](#protección-contra-costos-y-guard-de-inactividad)
 - [Instrucciones para Ejecutar un Job](#instrucciones-para-ejecutar-un-job)
   - [Paso 0: Despliegue de Infraestructura con Terraform (apps_base)](#paso-0-despliegue-de-infraestructura-con-terraform-apps_base)
-  - [Opción 1: On-Demand vía Tag de EC2 (Recomendada)](#opción-1-on-demand-vía-tag-de-ec2-recomendada)
-  - [Opción 2: On-Demand vía AWS SSM (Sin SSH)](#opción-2-on-demand-vía-aws-ssm-sin-ssh)
+  - [Opción 1: Ejecución Remota Automatizada con Make (Recomendada)](#opción-1-ejecución-remota-automatizada-con-make-recomendada)
+  - [Opción 2: Ejecución Remota Manual vía AWS CLI + SSM (Sin SSH)](#opción-2-ejecución-remota-manual-vía-aws-cli--ssm-sin-ssh)
   - [Opción 3: Ejecución Local / Workstation](#opción-3-ejecución-local--workstation)
 - [Publicación Concurrente en DVC y Git](#publicación-concurrente-en-dvc-y-git)
 - [Automatización y Aislamiento en Kaggle](#automatización-y-aislamiento-en-kaggle)
@@ -51,14 +51,16 @@ El pipeline de ablaciones utiliza un modelo híbrido optimizado para costo y est
 ### Flujo Desatendido End-to-End
 
 ```
-1. Tag / SSM Trigger
-       │
+1. Disparo On-Demand (make ablation-ec2-run / ablation-remote)
+       │  Obtiene ec2_runner_instance_id de los outputs de Terraform
        ▼
-2. Encendido de la VM (EC2)
-       │
+2. Encendido de la VM (aws ec2 start-instances)
+       │  Espera estado 'running' y agente SSM 'Online'
+       │  (En primer arranque: cloud-init clona el repo, corre uv sync e instala unidades systemd)
        ▼
-3. Boot Service (ablation-autostart.service)
-       │  Lee el tag 'AblationExperiment' vía IMDSv2
+3. Disparo vía AWS SSM (aws ssm send-command)
+       │  Escribe SAMPLE_SIZE y SEED en /run/ablation/override.env
+       │  Inicia ablation@<EXPERIMENT>.service (--no-block)
        ▼
 4. Sincronización y Validación (run_ablation_job.sh)
        │  Hard-sync con origin/ablations-experiments + uv sync --frozen
@@ -85,7 +87,7 @@ Para evitar cobros accidentales por instancias olvidadas o procesos colgados:
 2. **Fail-Safe de Systemd (`ExecStopPost`)**: Si el proceso es terminado por `TimeoutStartSec` (5 horas) o muere por OOM, systemd detecta `$SERVICE_RESULT != "success"` y fuerza el apagado.
 3. **Idle Guard para Instancias "Zombie" (`ablation-idle-guard.timer`)**:
    * Corre cada 5 minutos.
-   * Si no hay ningún servicio `ablation@*.service` activo y el tiempo de actividad (`uptime`) supera los **20 minutos**, apaga la VM automáticamente.
+   * Si no hay ningún servicio `ablation@*.service` activo y el tiempo de actividad (`uptime`) supera las **4 horas** (`14400` segundos por defecto), apaga la VM automáticamente.
    * **Inmune a esperas de Kaggle**: Dado que monitorea el estado del servicio systemd y no la CPU, la VM nunca se apagará mientras esté esperando que Kaggle termine de sintetizar los audios.
    * **Escape Hatch manual**: Para sesiones de mantenimiento interactivo o depuración manual, se puede desactivar creando el archivo `/tmp/disable_idle_guard`.
 
@@ -95,14 +97,14 @@ Para evitar cobros accidentales por instancias olvidadas o procesos colgados:
 
 ### Paso 0: Despliegue de Infraestructura con Terraform (apps_base)
 
-Antes de iniciar jobs remotos, la infraestructura en AWS (PostgreSQL RDS, la instancia EC2 Runner y los secretos de AWS Secrets Manager para **DB**, **Kaggle**, **Git SSH deploy key** y **claves de API de LLM** (`OPENAI_API_KEY`) debe estar desplegada. Para ello se utiliza el comando simplificado en Make:
+Antes de iniciar jobs remotos, la infraestructura en AWS (PostgreSQL RDS, la instancia EC2 Runner y los secretos de AWS Secrets Manager para **DB**, **Kaggle**, **Git SSH deploy key** y **claves de API de LLM** (`OPENAI_API_KEY`)) debe estar desplegada. En su primer arranque (`cloud-init`), la instancia EC2 únicamente aprovisiona el entorno (`uv`, clonación del repositorio, `uv sync --frozen` e instalación de los servicios `ablation@.service` y `ablation-idle-guard`), quedando lista para recibir ejecuciones vía AWS SSM:
 
 ```bash
 # Desplegar la infraestructura (habilita automáticamente el EC2 runner y provisiona secretos)
 make ablation-deploy
 ```
 
-#### ¿Cómo pasar variables de entorno?
+#### ¿Cómo pasar variables de entorno para el despliegue?
 El comando soporta tres formas sencillas de configuración según tu preferencia:
 
 1. **Automático desde `.env`**:
@@ -110,13 +112,11 @@ El comando soporta tres formas sencillas de configuración según tu preferencia
    - `KAGGLE_USERNAME` y `KAGGLE_KEY`: Crea y gestiona el secreto de Kaggle (nombre personalizado opcional mediante `KAGGLE_SECRET_NAME`).
    - `GIT_SSH_KEY_PATH` (ruta al archivo de clave privada deploy key, ej. `~/.ssh/ablation_deploy_key`) o `GIT_SSH_PRIVATE_KEY`: Crea el secreto SSH para clonar/publicar repositorios privados (nombre personalizado opcional mediante `GIT_SSH_SECRET_NAME`).
    - `OPENAI_API_KEY`, `OPENAI_BASE_URL` (opcional): Crea el secreto de LLMs (nombre personalizado opcional mediante `LLM_SECRET_NAME`).
-   - `EXPERIMENT`: Experimento que el runner ejecutará automáticamente al encender (tag `AblationExperiment`: `B1`, `B2`, `B3`, `B1a`–`B1d`, `B2a`–`B2b`, `B3a`–`B3e`, `all`, `generation`, o vacío para no auto-ejecutar).
-   - `SAMPLE_SIZE` y `SEED` (opcionales, por defecto `30` y `42`): Tamaño de muestra estratificada y semilla aleatoria para el runner (tags `AblationSampleSize` y `AblationSeed`).
    - `BRANCH`: Rama git objetivo para el runner (por defecto `ablations-experiments`).
 2. **Parámetros en la invocación de Make**:
    Puedes sobreescribir variables puntuales en la línea de comando:
    ```bash
-   make ablation-deploy EXPERIMENT=B2 SAMPLE_SIZE=50 SEED=123 KAGGLE_SECRET_NAME=kaggle-username
+   make ablation-deploy BRANCH=ablations-experiments KAGGLE_SECRET_NAME=kaggle-username
    ```
 3. **Variables estándar de Terraform (`TF_VAR_*`)**:
    Terraform reconoce cualquier variable exportada en tu shell con el prefijo `TF_VAR_`:
@@ -125,62 +125,62 @@ El comando soporta tres formas sencillas de configuración según tu preferencia
    make ablation-deploy
    ```
 
-#### Obtener el ID de la instancia creada
-Una vez completado el despliegue, consulta los identificadores generados:
+#### Consultar los outputs del despliegue
+Una vez completado el despliegue, puedes verificar los identificadores y comandos generados:
 ```bash
 make ablation-deploy-output
 ```
-Copia el valor de `ec2_runner_instance_id` para los siguientes pasos.
 
 *(Nota: Para destruir los recursos en AWS cuando termines todas tus pruebas, usa `make ablation-destroy`).*
 
 ---
 
-### Opción 1: On-Demand vía Tag de EC2 (Recomendada)
+### Opción 1: Ejecución Remota Automatizada con Make (Recomendada)
 
-Este método es 100% desatendido: no requiere conectarse a la máquina ni abrir terminales SSH. Cuando ejecutas `make ablation-deploy`, la instancia EC2 se crea, **se enciende automáticamente** y ejecuta el experimento configurado en `EXPERIMENT` (en tu `.env` o por CLI) y luego se apaga sola (`stopped`) al finalizar.
+Este método es 100% desatendido y no requiere claves SSH ni actualizar tags en EC2. El comando `make ablation-ec2-run` (o su alias `make ablation-remote`) realiza automáticamente todo el ciclo de disparo:
+1. Obtiene el `ec2_runner_instance_id` desde los outputs de Terraform del stack desplegado.
+2. Enciende la instancia EC2 (`aws ec2 start-instances`) y espera a que alcance el estado `running` y a que el agente SSM reporte estado `Online`.
+3. Ejecuta `aws ssm send-command` configurando dinámicamente los parámetros `SAMPLE_SIZE` y `SEED` en `/run/ablation/override.env` e iniciando el servicio `ablation@<EXPERIMENT>.service` (esperando automáticamente a que finalice el bootstrap de `cloud-init` si es el primer arranque).
+4. Al finalizar el experimento y publicar los resultados en DVC/Git, la instancia se apaga sola (`stopped`).
 
-Para ejecuciones posteriores (cuando la VM ya está apagada):
+```bash
+# Ejecutar experimento B2 con valores por defecto (SAMPLE_SIZE=30, SEED=42)
+make ablation-ec2-run EXPERIMENT=B2
 
-1. **Configurar o cambiar el experimento a ejecutar** (`B1`, `B2`, `B3`, o variante como `B2a`), tamaño de muestra o semilla:
-   * **Vía `.env` / Terraform** (actualiza `EXPERIMENT`, `SAMPLE_SIZE`, `SEED` en `.env` o pásalos por CLI):
-     ```bash
-     make ablation-deploy EXPERIMENT=B2 SAMPLE_SIZE=50 SEED=123
-     ```
-   * **O directamente vía AWS CLI** (sin correr Terraform entre ejecuciones):
-     ```bash
-     INSTANCE_ID="<id-de-la-instancia-runner>"
-     aws ec2 create-tags --resources "$INSTANCE_ID" --tags \
-       Key=AblationExperiment,Value=B2 \
-       Key=AblationSampleSize,Value=50 \
-       Key=AblationSeed,Value=123
-     ```
+# Ejecutar experimento B1, B2 o B3 personalizando semilla y tamaño de muestra
+make ablation-ec2-run EXPERIMENT=B1 SEED=42 SAMPLE_SIZE=30
+make ablation-ec2-run EXPERIMENT=B3 SEED=123 SAMPLE_SIZE=50
 
-2. **Encender la instancia** (si está en estado `stopped`):
-   ```bash
-   INSTANCE_ID="<id-de-la-instancia-runner>"
-   aws ec2 start-instances --instance-ids "$INSTANCE_ID"
-   ```
+# Alias equivalente:
+make ablation-remote EXPERIMENT=B2 SEED=42 SAMPLE_SIZE=30
+```
 
-3. **Monitoreo opcional** (la VM se apagará sola al terminar):
-   * Ver logs en tiempo real vía SSM:
-     ```bash
-     aws ssm start-session --target "$INSTANCE_ID"
-     # Dentro de la sesión:
-     journalctl -u ablation@B2.service -f
-     ```
+#### Monitoreo opcional (la VM se apagará sola al terminar)
+Al ejecutar `make ablation-ec2-run`, la terminal imprimirá los comandos exactos con tu `CommandId` e `InstanceId`:
+```bash
+# Seguir los logs del experimento en tiempo real vía SSM:
+aws ssm start-session --target "$INSTANCE_ID" --document-name AWS-StartInteractiveCommand \
+  --parameters 'command=["journalctl -u ablation@B2 -f"]'
+```
 
 ---
 
-### Opción 2: On-Demand vía AWS SSM (Sin SSH)
+### Opción 2: Ejecución Remota Manual vía AWS CLI + SSM (Sin SSH)
 
-Si la instancia ya está encendida y se desea disparar un experimento directamente sin claves SSH:
+Si prefieres ejecutar los pasos de encendido y envío del comando SSM manualmente usando los outputs de `make ablation-deploy-output`:
 
 ```bash
+INSTANCE_ID=$(terraform -chdir=terraform/stacks/apps_base output -raw ec2_runner_instance_id)
+
+# 1. Encender la instancia (si está en estado 'stopped') y esperar a que arranque
+aws ec2 start-instances --instance-ids "$INSTANCE_ID"
+aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+
+# 2. Disparar el experimento (B1, B2, B3) pasando SAMPLE_SIZE y SEED vía SSM
 aws ssm send-command \
   --instance-ids "$INSTANCE_ID" \
   --document-name "AWS-RunShellScript" \
-  --parameters 'commands=["systemctl start --no-block ablation@B2.service"]'
+  --parameters 'commands=["mkdir -p /run/ablation && printf \"SAMPLE_SIZE=30\nSEED=42\n\" > /run/ablation/override.env && systemctl start --no-block ablation@B2.service"]'
 ```
 
 ---
@@ -396,8 +396,13 @@ make ablation-deploy                         # Despliega RDS + Secrets Manager +
 make ablation-deploy-output                  # Muestra outputs (Instance ID, comandos SSM)
 make ablation-destroy                        # Destruye la infraestructura desplegada
 
-# ── Ejecución desatendida / orquestada (recomendada) ──
-make ablation-job EXPERIMENT=B2              # corre pipeline completo + publica en DVC/git
+# ── Ejecución remota en EC2 vía AWS SSM (recomendada) ──
+make ablation-ec2-run EXPERIMENT=B2                        # Enciende EC2 + dispara B2 vía SSM (SAMPLE_SIZE=30, SEED=42)
+make ablation-ec2-run EXPERIMENT=B1 SEED=42 SAMPLE_SIZE=30 # Personaliza experimento, semilla y muestra
+make ablation-remote EXPERIMENT=B3 SEED=123 SAMPLE_SIZE=50 # Alias de ablation-ec2-run
+
+# ── Ejecución desatendida local / workstation ──
+make ablation-job EXPERIMENT=B2              # corre pipeline completo localmente + publica en DVC/git
 make ablation-job EXPERIMENT=B1 SAMPLE_SIZE=50 SEED=42 SHUTDOWN=1
 
 # ── Pipeline completo directo (sin publicación ni apagado) ──
