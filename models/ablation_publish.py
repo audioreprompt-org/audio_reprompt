@@ -49,31 +49,76 @@ def run_cmd(
     return result
 
 
+def _scan_target_dir_files(target_dir: Path, repo_root: Path) -> list[Path]:
+    """Walk repo_root / target_dir directly, skipping cache and system files."""
+    full_target = target_dir if target_dir.is_absolute() else (repo_root / target_dir)
+    if not full_target.exists() or not full_target.is_dir():
+        return []
+
+    collected: list[Path] = []
+    ignored_dir_names = {".cache", "__pycache__", ".git", ".dvc"}
+    ignored_file_names = {".DS_Store", ".gitkeep"}
+
+    for root, dirs, files in os.walk(full_target):
+        # Prune ignored directories in-place so os.walk does not descend
+        dirs[:] = [d for d in dirs if d not in ignored_dir_names and not d.startswith(".")]
+        for f in files:
+            if f in ignored_file_names or f.startswith("._") or f.endswith(".tmp"):
+                continue
+            file_path = Path(root) / f
+            if file_path.is_file():
+                try:
+                    rel_path = file_path.relative_to(repo_root)
+                except ValueError:
+                    rel_path = file_path
+                collected.append(rel_path)
+
+    return sorted(collected)
+
+
 def get_changed_dvc_files(target_dir: Path, repo_root: Path, dvc_cmd: str = "dvc") -> list[Path]:
-    """Identify new or modified files under target_dir using dvc data status."""
+    """Identify new or modified files under target_dir using dvc data status,
+    with a fallback to scanning target_dir directly if dvc data status fails
+    or returns no changes while files exist on disk.
+    """
     cmd = [dvc_cmd, "data", "status", "--granular", "--json"]
-    proc = run_cmd(cmd, cwd=repo_root, check=True, capture_output=True)
-
-    status = json.loads(proc.stdout)
-    target_prefix = target_dir.as_posix().rstrip("/") + "/"
-
     changed: list[Path] = []
     seen: set[str] = set()
 
-    # uncommitted: workspace vs .dvc file; committed: .dvc file vs git HEAD
-    for section in ("uncommitted", "committed"):
-        sec_data = status.get(section, {})
-        for kind in ("added", "modified"):
-            for p_str in sec_data.get(kind, []):
-                # Ignore directories itself or outside target
-                if p_str.endswith("/") or not p_str.startswith(target_prefix) or p_str in seen:
-                    continue
-                seen.add(p_str)
-                full_path = repo_root / p_str
-                if full_path.is_file():
-                    changed.append(Path(p_str))
+    try:
+        proc = run_cmd(cmd, cwd=repo_root, check=True, capture_output=True)
+        status = json.loads(proc.stdout.strip() or "{}")
+        target_prefix = target_dir.as_posix().rstrip("/") + "/"
 
-    return sorted(changed)
+        # uncommitted: workspace vs .dvc file; committed: .dvc file vs git HEAD
+        for section in ("uncommitted", "committed"):
+            sec_data = status.get(section, {})
+            for kind in ("added", "modified"):
+                for p_str in sec_data.get(kind, []):
+                    # Ignore directories itself or outside target
+                    if p_str.endswith("/") or not p_str.startswith(target_prefix) or p_str in seen:
+                        continue
+                    seen.add(p_str)
+                    full_path = repo_root / p_str
+                    if full_path.is_file():
+                        changed.append(Path(p_str))
+    except Exception as exc:
+        logger.warning(f"dvc data status failed ({exc}); falling back to direct scan of {target_dir}")
+        changed = []
+
+    if changed:
+        return sorted(changed)
+
+    # Fallback: if dvc data status returned empty or failed, but files exist in target_dir,
+    # collect all files so fresh runs on uninitialized VMs never silently skip publishing.
+    fallback_files = _scan_target_dir_files(target_dir, repo_root)
+    if fallback_files:
+        logger.info(
+            f"dvc data status reported 0 changed files; collected {len(fallback_files)} file(s) via fallback scan of {target_dir}"
+        )
+        return fallback_files
+
+    return []
 
 
 def stash_files(file_rel_paths: list[Path], repo_root: Path, stash_dir: Path) -> None:
@@ -118,7 +163,8 @@ def publish(
             raise RuntimeError("Detached HEAD state; please pass explicit --branch")
 
     target_path = Path(target).relative_to(repo_root) if Path(target).is_absolute() else Path(target)
-    dvc_file = repo_root / f"{target_path.as_posix()}.dvc"
+    dvc_file_rel = f"{target_path.as_posix()}.dvc"
+    dvc_file = repo_root / dvc_file_rel
 
     if not dvc_file.exists():
         raise FileNotFoundError(f"{dvc_file} does not exist. Is {target_path} tracked by DVC?")
@@ -156,7 +202,7 @@ def publish(
             run_cmd(["git", "checkout", "--quiet", "-f", "-B", branch, f"{remote}/{branch}"], cwd=repo_root, check=True)
 
             # Pull remote DVC assets
-            run_cmd([dvc_cmd, "pull", "--force", dvc_file.name], cwd=repo_root, check=True)
+            run_cmd([dvc_cmd, "pull", "--force", dvc_file_rel], cwd=repo_root, check=True)
 
             # Restore stashed files on top
             restore_stash(stash_dir, repo_root)
@@ -165,10 +211,10 @@ def publish(
             run_cmd([dvc_cmd, "add", target_path.as_posix()], cwd=repo_root, check=True)
 
             # Push data to DVC remote before committing git pointer
-            run_cmd([dvc_cmd, "push", dvc_file.name], cwd=repo_root, check=True)
+            run_cmd([dvc_cmd, "push", dvc_file_rel], cwd=repo_root, check=True)
 
             # Check if .dvc file changed
-            run_cmd(["git", "add", dvc_file.as_posix()], cwd=repo_root, check=True)
+            run_cmd(["git", "add", dvc_file_rel], cwd=repo_root, check=True)
             diff_proc = run_cmd(["git", "diff", "--cached", "--quiet"], cwd=repo_root, check=False)
             if diff_proc.returncode == 0:
                 logger.info("Remote already contains these results; nothing new to commit.")
@@ -184,7 +230,7 @@ def publish(
                 logger.info(f"✓ Published {head_proc.stdout.strip()} to {remote}/{branch}")
                 # Print updated DVC entry
                 if dvc_file.exists():
-                    logger.info(f"Updated {dvc_file.name}:\n{dvc_file.read_text().strip()}")
+                    logger.info(f"Updated {dvc_file_rel}:\n{dvc_file.read_text().strip()}")
                 return 0
 
             if attempt >= max_attempts:

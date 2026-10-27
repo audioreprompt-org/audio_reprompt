@@ -206,6 +206,9 @@ if [[ -f .env ]]; then
   set -a; source .env 2>/dev/null || true; set +a
 fi
 
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
+export AWS_REGION="${AWS_REGION:-$AWS_DEFAULT_REGION}"
+
 # Load DB / Kaggle / git credentials via models.infra_secrets.
 # It exits non-zero if any *requested* secret can't be resolved → fail fast.
 log "Resolving credentials..."
@@ -267,6 +270,10 @@ fi
 if [[ -f data/prompts.dvc ]] && ! ls data/prompts/*.csv >/dev/null 2>&1; then
   log "Pulling prompts via DVC (data/prompts.dvc)..."
   uv run --quiet dvc pull data/prompts.dvc || die "dvc pull data/prompts.dvc failed"
+fi
+if [[ -f data/ablations.dvc ]]; then
+  log "Pulling existing ablation results via DVC (data/ablations.dvc)..."
+  uv run --quiet dvc pull data/ablations.dvc || log "WARNING: dvc pull data/ablations.dvc had missing files or failed (will retry during publish)"
 fi
 
 # ── 5. Execution ─────────────────────────────────────────────────────────────
