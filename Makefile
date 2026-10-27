@@ -27,6 +27,8 @@ TF_VARS = \
 	$(if $(OPENAI_API_KEY),-var="openai_api_key=$(OPENAI_API_KEY)") \
 	$(if $(OPENAI_BASE_URL),-var="openai_base_url=$(OPENAI_BASE_URL)") \
 	$(if $(EXPERIMENT),-var="runner_experiment_tag=$(EXPERIMENT)") \
+	$(if $(SAMPLE_SIZE),-var="runner_sample_size=$(SAMPLE_SIZE)") \
+	$(if $(SEED),-var="runner_seed=$(SEED)") \
 	$(if $(BRANCH),-var="runner_git_branch=$(BRANCH)") \
 	$(EXTRA_TF_VARS)
 
@@ -58,6 +60,30 @@ ablation-deploy-output:
 
 # Destruye la infraestructura desplegada
 ablation-destroy: destroy
+
+# ── One-time Local Postgres Export & RDS Hydration ───────────
+DB_DUMP_FILE ?= local_pg.dump
+RDS_USER ?= temp
+RDS_PASSWORD ?= temp
+RDS_DB ?= temp
+
+# Export local Docker Postgres (app/docker-compose.yml) to a snapshot file
+db-export:
+	docker compose -f app/docker-compose.yml exec -T db \
+		pg_dump -Fc --no-owner --no-acl -U $(or $(DB_USER),postgres) -d $(or $(DB_NAME),postgres) > $(DB_DUMP_FILE)
+	@ls -lh $(DB_DUMP_FILE)
+
+# Hydrate RDS from the snapshot file and verify table row counts
+db-hydrate:
+	@RDS_HOST=$${RDS_HOST:-$$(terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) output -raw rds_address)}; \
+	echo "Hydrating RDS ($$RDS_HOST) from $(DB_DUMP_FILE)..."; \
+	docker compose -f app/docker-compose.yml exec -T -e PGPASSWORD="$(RDS_PASSWORD)" db \
+		pg_restore --no-owner --no-acl --clean --if-exists \
+		-h "$$RDS_HOST" -p 5432 -U "$(RDS_USER)" -d "$(RDS_DB)" < $(DB_DUMP_FILE) || [ $$? -eq 1 ]; \
+	echo "Verifying RDS table row counts:"; \
+	docker compose -f app/docker-compose.yml exec -T -e PGPASSWORD="$(RDS_PASSWORD)" db \
+		psql -h "$$RDS_HOST" -p 5432 -U "$(RDS_USER)" -d "$(RDS_DB)" \
+		-c "SELECT relname AS table, n_live_tup AS rows FROM pg_stat_user_tables ORDER BY relname;"
 
 
 

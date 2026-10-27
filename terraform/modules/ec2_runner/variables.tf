@@ -44,6 +44,18 @@ variable "experiment_tag" {
   }
 }
 
+variable "sample_size" {
+  description = "Default stratified sample size for the ablation runner (exposed as AblationSampleSize tag and /etc/ablation/env)"
+  type        = number
+  default     = 30
+}
+
+variable "seed" {
+  description = "Default random seed for the ablation runner (exposed as AblationSeed tag and /etc/ablation/env)"
+  type        = number
+  default     = 42
+}
+
 variable "kaggle_secret_name" {
   description = "Secrets Manager secret with Kaggle credentials ({\"username\",\"key\"}); empty = rely on ~/.kaggle/kaggle.json"
   type        = string

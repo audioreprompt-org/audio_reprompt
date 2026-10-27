@@ -70,6 +70,18 @@ variable "runner_experiment_tag" {
   }
 }
 
+variable "runner_sample_size" {
+  description = "Tamaño de muestra estratificada por defecto para el runner (tag AblationSampleSize)"
+  type        = number
+  default     = 30
+}
+
+variable "runner_seed" {
+  description = "Semilla aleatoria por defecto para el runner (tag AblationSeed)"
+  type        = number
+  default     = 42
+}
+
 variable "runner_git_branch" {
   description = "Rama que el runner ejecuta y donde publica resultados"
   type        = string

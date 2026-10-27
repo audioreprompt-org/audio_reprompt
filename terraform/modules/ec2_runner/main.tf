@@ -173,8 +173,10 @@ resource "aws_instance" "runner" {
 
   tags = merge(
     {
-      Name  = "audio-reprompt-ec2-runner"
-      owner = var.owner
+      Name               = "audio-reprompt-ec2-runner"
+      owner              = var.owner
+      AblationSampleSize = tostring(var.sample_size)
+      AblationSeed       = tostring(var.seed)
     },
     var.experiment_tag != "" ? { "AblationExperiment" = var.experiment_tag } : {}
   )

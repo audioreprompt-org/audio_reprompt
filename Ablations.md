@@ -111,11 +111,12 @@ El comando soporta tres formas sencillas de configuración según tu preferencia
    - `GIT_SSH_KEY_PATH` (ruta al archivo de clave privada deploy key, ej. `~/.ssh/ablation_deploy_key`) o `GIT_SSH_PRIVATE_KEY`: Crea el secreto SSH para clonar/publicar repositorios privados (nombre personalizado opcional mediante `GIT_SSH_SECRET_NAME`).
    - `OPENAI_API_KEY`, `OPENAI_BASE_URL` (opcional): Crea el secreto de LLMs (nombre personalizado opcional mediante `LLM_SECRET_NAME`).
    - `EXPERIMENT`: Experimento que el runner ejecutará automáticamente al encender (tag `AblationExperiment`: `B1`, `B2`, `B3`, `B1a`–`B1d`, `B2a`–`B2b`, `B3a`–`B3e`, `all`, `generation`, o vacío para no auto-ejecutar).
+   - `SAMPLE_SIZE` y `SEED` (opcionales, por defecto `30` y `42`): Tamaño de muestra estratificada y semilla aleatoria para el runner (tags `AblationSampleSize` y `AblationSeed`).
    - `BRANCH`: Rama git objetivo para el runner (por defecto `ablations-experiments`).
 2. **Parámetros en la invocación de Make**:
    Puedes sobreescribir variables puntuales en la línea de comando:
    ```bash
-   make ablation-deploy EXPERIMENT=B2 KAGGLE_SECRET_NAME=kaggle-mfreyeso
+   make ablation-deploy EXPERIMENT=B2 SAMPLE_SIZE=50 SEED=123 KAGGLE_SECRET_NAME=kaggle-username
    ```
 3. **Variables estándar de Terraform (`TF_VAR_*`)**:
    Terraform reconoce cualquier variable exportada en tu shell con el prefijo `TF_VAR_`:
@@ -141,15 +142,18 @@ Este método es 100% desatendido: no requiere conectarse a la máquina ni abrir 
 
 Para ejecuciones posteriores (cuando la VM ya está apagada):
 
-1. **Configurar o cambiar el experimento a ejecutar** (`B1`, `B2`, `B3`, o variante como `B2a`):
-   * **Vía `.env` / Terraform** (actualiza `EXPERIMENT` en `.env` o pásalo por CLI):
+1. **Configurar o cambiar el experimento a ejecutar** (`B1`, `B2`, `B3`, o variante como `B2a`), tamaño de muestra o semilla:
+   * **Vía `.env` / Terraform** (actualiza `EXPERIMENT`, `SAMPLE_SIZE`, `SEED` en `.env` o pásalos por CLI):
      ```bash
-     make ablation-deploy EXPERIMENT=B2
+     make ablation-deploy EXPERIMENT=B2 SAMPLE_SIZE=50 SEED=123
      ```
    * **O directamente vía AWS CLI** (sin correr Terraform entre ejecuciones):
      ```bash
      INSTANCE_ID="<id-de-la-instancia-runner>"
-     aws ec2 create-tags --resources "$INSTANCE_ID" --tags Key=AblationExperiment,Value=B2
+     aws ec2 create-tags --resources "$INSTANCE_ID" --tags \
+       Key=AblationExperiment,Value=B2 \
+       Key=AblationSampleSize,Value=50 \
+       Key=AblationSeed,Value=123
      ```
 
 2. **Encender la instancia** (si está en estado `stopped`):

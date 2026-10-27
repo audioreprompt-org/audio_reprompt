@@ -41,6 +41,8 @@ module "ec2_runner" {
   owner         = var.owner
 
   experiment_tag      = var.runner_experiment_tag
+  sample_size         = var.runner_sample_size
+  seed                = var.runner_seed
   git_branch          = var.runner_git_branch
   kaggle_secret_name  = module.project_secrets_manager.kaggle_secret_name != "" ? module.project_secrets_manager.kaggle_secret_name : var.runner_kaggle_secret_name
   git_ssh_secret_name = module.project_secrets_manager.git_ssh_secret_name != "" ? module.project_secrets_manager.git_ssh_secret_name : var.runner_git_ssh_secret_name

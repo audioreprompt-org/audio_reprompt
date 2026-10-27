@@ -212,6 +212,7 @@ terraform/stacks/apps_base/.terraform/
 
 # Temporals
 *.tmp
+*.dump
 
 # MacOS
 .DS_Store
