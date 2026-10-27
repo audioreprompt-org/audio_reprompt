@@ -18,5 +18,5 @@ output "ssm_trigger_command" {
   # Goes through systemd (env file, isolation, journald) and returns at once,
   # so SSM's 1h executionTimeout never kills the job. Follow logs with:
   #   journalctl -u ablation@B2 -f
-  value = "aws ssm send-command --instance-ids ${aws_instance.runner.id} --document-name 'AWS-RunShellScript' --parameters 'commands=[\"systemctl start --no-block ablation@B2.service\"]'"
+  value = "aws ssm send-command --instance-ids ${aws_instance.runner.id} --document-name 'AWS-RunShellScript' --parameters 'commands=[\"mkdir -p /run/ablation && printf \\\"SAMPLE_SIZE=30\\\\nSEED=42\\\\n\\\" > /run/ablation/override.env && systemctl start --no-block ablation@B2.service\"]'"
 }

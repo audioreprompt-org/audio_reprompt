@@ -3,7 +3,7 @@
 # ablation_idle_guard.sh — safeguard against runaway idle billing on EC2 runner.
 #
 # Runs periodically (via ablation-idle-guard.timer) to detect "zombie" instances:
-#   * Boots where no ablation tag was provided and instance was forgotten.
+#   * Boots where no ablation job was triggered and instance was left idle.
 #   * Early crashes during cloud-init/bootstrap before a job starts.
 #   * Completed jobs where automatic shutdown failed for any unexpected reason.
 #
@@ -45,12 +45,7 @@ if systemctl is-active --quiet "ablation@*.service" 2>/dev/null; then
   exit 0
 fi
 
-# 4. Check if autostart boot-trigger is still running
-if systemctl is-active --quiet "ablation-autostart.service" 2>/dev/null; then
-  exit 0
-fi
-
-# 5. Check if cloud-init is still running on first boot
+# 4. Check if cloud-init is still running on first boot
 if command -v cloud-init >/dev/null 2>&1; then
   if cloud-init status 2>/dev/null | grep -q "status: running"; then
     exit 0

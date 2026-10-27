@@ -6,11 +6,9 @@
 # Shell code below uses plain $VAR (no braces) so it passes through untouched.
 #
 # Lifecycle:
-#   * First boot  → provision (uv, clone, uv sync, install systemd units from
-#                   the repo) and kick the auto-trigger once.
-#   * Every boot  → ablation-autostart.service (enabled here) reads the
-#                   `AblationExperiment` instance tag via IMDSv2 and starts
-#                   ablation@<EXP>.service without blocking boot.
+#   * First boot  → provision the VM (uv, clone repo, uv sync, install systemd
+#                   units ablation@.service and ablation-idle-guard.{service,timer}).
+#   * Jobs are triggered on demand via AWS SSM (aws ssm send-command).
 # ──────────────────────────────────────────────────────────────────────────────
 package_update: true
 package_upgrade: true
@@ -76,16 +74,11 @@ write_files:
 
       # 4. Install systemd units from the repo (single source of truth)
       install -m 0644 deploy/systemd/ablation@.service /etc/systemd/system/ablation@.service
-      install -m 0644 deploy/systemd/ablation-autostart.service /etc/systemd/system/ablation-autostart.service
       install -m 0644 deploy/systemd/ablation-idle-guard.service /etc/systemd/system/ablation-idle-guard.service
       install -m 0644 deploy/systemd/ablation-idle-guard.timer /etc/systemd/system/ablation-idle-guard.timer
       systemctl daemon-reload
-      systemctl enable ablation-autostart.service
       systemctl enable --now ablation-idle-guard.timer
 
 runcmd:
   - [bash, -c, "snap install aws-cli --classic || echo 'aws-cli snap install failed (optional)'"]
   - [/usr/local/sbin/ablation-bootstrap]
-  # The unit was enabled during this boot, so trigger it once explicitly.
-  # --no-block: never hold cloud-final while a multi-hour job runs.
-  - [systemctl, start, --no-block, ablation-autostart.service]

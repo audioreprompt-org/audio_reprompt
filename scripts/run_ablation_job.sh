@@ -185,14 +185,6 @@ if [[ -z "$RUN_ID" ]]; then
   RUN_ID="R$(date +%Y%m%d_%H%M%S)"
 fi
 
-# Fallback to EC2 instance tags (IMDSv2), then defaults (30 / 42)
-imds_tag() {
-  local token
-  token=$(curl -fsS -m 2 -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null) || return 0
-  curl -fsS -m 2 -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/tags/instance/$1" 2>/dev/null || true
-}
-: "${SAMPLE_SIZE:=$(imds_tag AblationSampleSize)}"
-: "${SEED:=$(imds_tag AblationSeed)}"
 : "${SAMPLE_SIZE:=30}"
 : "${SEED:=42}"
 

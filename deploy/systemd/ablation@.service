@@ -10,6 +10,7 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/opt/audio_reprompt
 EnvironmentFile=-/etc/ablation/env
+EnvironmentFile=-/run/ablation/override.env
 Environment=PYTHONUNBUFFERED=1
 Environment=KAGGLE_ISOLATE_RUNS=1
 

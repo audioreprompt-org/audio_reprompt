@@ -94,8 +94,6 @@ resource "aws_iam_policy" "runner_policy" {
           "${var.dvc_s3_bucket_arn}/*"
         ]
       }
-      # Instance tags are read through IMDS (instance_metadata_tags), so
-      # ec2:DescribeTags is no longer required.
     ]
   })
 }
@@ -148,12 +146,10 @@ resource "aws_instance" "runner" {
     delete_on_termination = true
   }
 
-  # IMDSv2 only; expose instance tags to IMDS so the boot-time trigger can read
-  # `AblationExperiment` without the AWS CLI or ec2:DescribeTags.
+  # Enforce IMDSv2
   metadata_options {
-    http_endpoint          = "enabled"
-    http_tokens            = "required"
-    instance_metadata_tags = "enabled"
+    http_endpoint = "enabled"
+    http_tokens   = "required"
   }
 
   user_data = templatefile("${path.module}/../../../deploy/aws/cloud-init.yaml.tftpl", {
@@ -171,13 +167,8 @@ resource "aws_instance" "runner" {
   # cloud-init only runs on first boot: recreate the VM when provisioning changes
   user_data_replace_on_change = true
 
-  tags = merge(
-    {
-      Name               = "audio-reprompt-ec2-runner"
-      owner              = var.owner
-      AblationSampleSize = tostring(var.sample_size)
-      AblationSeed       = tostring(var.seed)
-    },
-    var.experiment_tag != "" ? { "AblationExperiment" = var.experiment_tag } : {}
-  )
+  tags = {
+    Name  = "audio-reprompt-ec2-runner"
+    owner = var.owner
+  }
 }

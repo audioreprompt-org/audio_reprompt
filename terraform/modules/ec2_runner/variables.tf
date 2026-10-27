@@ -33,29 +33,6 @@ variable "vpc_id" {
   default     = ""
 }
 
-variable "experiment_tag" {
-  description = "Default experiment to run on instance start (e.g. B2, or empty to require manual trigger)"
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = contains(["", "all", "generation", "B1", "B2", "B3", "B1a", "B1b", "B1c", "B1d", "B2a", "B2b", "B3a", "B3b", "B3c", "B3d", "B3e"], var.experiment_tag)
-    error_message = "experiment_tag must be empty or a valid experiment ID (B1, B2, B3, B1a-B1d, B2a-B2b, B3a-B3e, all, generation)."
-  }
-}
-
-variable "sample_size" {
-  description = "Default stratified sample size for the ablation runner (exposed as AblationSampleSize tag and /etc/ablation/env)"
-  type        = number
-  default     = 30
-}
-
-variable "seed" {
-  description = "Default random seed for the ablation runner (exposed as AblationSeed tag and /etc/ablation/env)"
-  type        = number
-  default     = 42
-}
-
 variable "kaggle_secret_name" {
   description = "Secrets Manager secret with Kaggle credentials ({\"username\",\"key\"}); empty = rely on ~/.kaggle/kaggle.json"
   type        = string

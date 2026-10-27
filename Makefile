@@ -26,9 +26,6 @@ TF_VARS = \
 	$(if $(LLM_SECRET_NAME),-var="runner_llm_secret_name=$(LLM_SECRET_NAME)") \
 	$(if $(OPENAI_API_KEY),-var="openai_api_key=$(OPENAI_API_KEY)") \
 	$(if $(OPENAI_BASE_URL),-var="openai_base_url=$(OPENAI_BASE_URL)") \
-	$(if $(EXPERIMENT),-var="runner_experiment_tag=$(EXPERIMENT)") \
-	$(if $(SAMPLE_SIZE),-var="runner_sample_size=$(SAMPLE_SIZE)") \
-	$(if $(SEED),-var="runner_seed=$(SEED)") \
 	$(if $(BRANCH),-var="runner_git_branch=$(BRANCH)") \
 	$(EXTRA_TF_VARS)
 
@@ -60,6 +57,32 @@ ablation-deploy-output:
 
 # Destruye la infraestructura desplegada
 ablation-destroy: destroy
+
+EXPERIMENT ?= B2
+
+# Ejecuta un experimento de ablación en la instancia EC2 remota vía AWS SSM
+ablation-remote: ablation-ec2-run
+
+ablation-ec2-run:
+	@INSTANCE_ID=$$(terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) output -raw ec2_runner_instance_id 2>/dev/null); \
+	if [ -z "$$INSTANCE_ID" ] || [ "$$INSTANCE_ID" = "null" ]; then \
+		echo "Error: ec2_runner_instance_id output not found in stack $(STACK)." >&2; exit 1; \
+	fi; \
+	echo "==> Starting EC2 instance ($$INSTANCE_ID) for experiment $(EXPERIMENT)..."; \
+	aws ec2 start-instances --instance-ids "$$INSTANCE_ID" >/dev/null; \
+	aws ec2 wait instance-running --instance-ids "$$INSTANCE_ID"; \
+	while [ "$$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$$INSTANCE_ID" --query "InstanceInformationList[0].PingStatus" --output text 2>/dev/null)" != "Online" ]; do \
+		sleep 5; \
+	done; \
+	CMD_ID=$$(aws ssm send-command \
+		--instance-ids "$$INSTANCE_ID" \
+		--document-name "AWS-RunShellScript" \
+		--comment "Run ablation experiment $(EXPERIMENT)" \
+		--parameters 'commands=["if [ ! -f /etc/systemd/system/ablation@.service ]; then if command -v cloud-init >/dev/null 2>&1; then cloud-init status --wait || true; fi; if [ ! -f /etc/systemd/system/ablation@.service ] && [ -x /usr/local/sbin/ablation-bootstrap ]; then /usr/local/sbin/ablation-bootstrap; fi; while [ ! -f /etc/systemd/system/ablation@.service ]; do sleep 2; done; fi","mkdir -p /run/ablation","printf '\''SAMPLE_SIZE=%s\nSEED=%s\n'\'' $(SAMPLE_SIZE) $(SEED) > /run/ablation/override.env","systemctl daemon-reload","systemctl start --no-block ablation@$(EXPERIMENT).service"]' \
+		--query "Command.CommandId" \
+		--output text); \
+	echo "==> Triggered ablation@$(EXPERIMENT) (Command: $$CMD_ID)"; \
+	echo "    Logs: aws ssm start-session --target \"$$INSTANCE_ID\" --document-name AWS-StartInteractiveCommand --parameters 'command=[\"journalctl -u ablation@$(EXPERIMENT) -f\"]'"
 
 # ── One-time Local Postgres Export & RDS Hydration ───────────
 DB_DUMP_FILE ?= local_pg.dump

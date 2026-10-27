@@ -59,29 +59,6 @@ variable "runner_instance_type" {
   default     = "t3.xlarge"
 }
 
-variable "runner_experiment_tag" {
-  description = "Experimento inicial (tag AblationExperiment, p. ej. B2); vacío = sin auto-ejecución"
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = contains(["", "all", "generation", "B1", "B2", "B3", "B1a", "B1b", "B1c", "B1d", "B2a", "B2b", "B3a", "B3b", "B3c", "B3d", "B3e"], var.runner_experiment_tag)
-    error_message = "runner_experiment_tag debe ser vacío o un ID de experimento válido (B1, B2, B3, B1a-B1d, B2a-B2b, B3a-B3e, all, generation)."
-  }
-}
-
-variable "runner_sample_size" {
-  description = "Tamaño de muestra estratificada por defecto para el runner (tag AblationSampleSize)"
-  type        = number
-  default     = 30
-}
-
-variable "runner_seed" {
-  description = "Semilla aleatoria por defecto para el runner (tag AblationSeed)"
-  type        = number
-  default     = 42
-}
-
 variable "runner_git_branch" {
   description = "Rama que el runner ejecuta y donde publica resultados"
   type        = string
