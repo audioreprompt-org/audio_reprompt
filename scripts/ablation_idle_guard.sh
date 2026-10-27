@@ -17,7 +17,7 @@
 set -euo pipefail
 
 OVERRIDE_FILE="/tmp/disable_idle_guard"
-GRACE_PERIOD_SEC="${IDLE_GRACE_PERIOD_SEC:-1200}" # 20 minutes default
+GRACE_PERIOD_SEC="${IDLE_GRACE_PERIOD_SEC:-14400}" # 4 hours default
 
 log() { printf '[idle-guard %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
