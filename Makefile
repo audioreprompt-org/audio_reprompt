@@ -59,16 +59,36 @@ ablation-deploy-output:
 ablation-destroy: destroy
 
 EXPERIMENT ?= B2
+LOG_FILE ?= logs_ablations_latest.txt
+
+# Descarga los logs de consola más recientes de la instancia EC2
+ablation-ec2-logs:
+	@INSTANCE_ID=$$(aws ec2 describe-instances \
+		--filters "Name=instance-state-name,Values=running,stopped" \
+		--query "Reservations[].Instances[].InstanceId" \
+		--output text | awk '{print $$1}'); \
+	if [ -z "$$INSTANCE_ID" ] || [ "$$INSTANCE_ID" = "None" ] || [ "$$INSTANCE_ID" = "null" ]; then \
+		echo "Error: No EC2 instance found via aws ec2 describe-instances." >&2; exit 1; \
+	fi; \
+	echo "==> Fetching latest console logs for instance ($$INSTANCE_ID) to $(LOG_FILE)..."; \
+	aws ec2 get-console-output \
+		--instance-id "$$INSTANCE_ID" \
+		--latest \
+		--output text > $(LOG_FILE); \
+	echo "==> Logs saved to $(LOG_FILE)"
 
 # Ejecuta un experimento de ablación en la instancia EC2 remota vía AWS SSM
 ablation-remote: ablation-ec2-run
 
 ablation-ec2-run:
-	@INSTANCE_ID=$$(terraform -chdir=$(CURDIR)/terraform/stacks/$(STACK) output -raw ec2_runner_instance_id 2>/dev/null); \
-	if [ -z "$$INSTANCE_ID" ] || [ "$$INSTANCE_ID" = "null" ]; then \
-		echo "Error: ec2_runner_instance_id output not found in stack $(STACK)." >&2; exit 1; \
+	@INSTANCE_ID=$$(aws ec2 describe-instances \
+		--filters "Name=instance-state-name,Values=running,stopped" \
+		--query "Reservations[].Instances[].InstanceId" \
+		--output text | awk '{print $$1}'); \
+	if [ -z "$$INSTANCE_ID" ] || [ "$$INSTANCE_ID" = "None" ] || [ "$$INSTANCE_ID" = "null" ]; then \
+		echo "Error: No EC2 instance found via aws ec2 describe-instances." >&2; exit 1; \
 	fi; \
-	echo "==> Starting EC2 instance ($$INSTANCE_ID) for experiment $(EXPERIMENT)..."; \
+	echo "==> Using EC2 instance ($$INSTANCE_ID) for experiment $(EXPERIMENT)..."; \
 	aws ec2 start-instances --instance-ids "$$INSTANCE_ID" >/dev/null; \
 	aws ec2 wait instance-running --instance-ids "$$INSTANCE_ID"; \
 	while [ "$$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$$INSTANCE_ID" --query "InstanceInformationList[0].PingStatus" --output text 2>/dev/null)" != "Online" ]; do \
@@ -82,7 +102,7 @@ ablation-ec2-run:
 		--query "Command.CommandId" \
 		--output text); \
 	echo "==> Triggered ablation@$(EXPERIMENT) (Command: $$CMD_ID)"; \
-	echo "    Logs: aws ssm start-session --target \"$$INSTANCE_ID\" --document-name AWS-StartInteractiveCommand --parameters 'command=[\"journalctl -u ablation@$(EXPERIMENT) -f\"]'"
+	echo "    Logs (console output): make ablation-ec2-logs";
 
 # ── One-time Local Postgres Export & RDS Hydration ───────────
 DB_DUMP_FILE ?= local_pg.dump

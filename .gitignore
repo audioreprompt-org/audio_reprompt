@@ -224,3 +224,6 @@ results/*
 
 # Kaggle staging directory
 .kaggle_staging/
+
+# Ablation Logs
+logs_*.txt

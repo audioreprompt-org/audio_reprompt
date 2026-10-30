@@ -52,7 +52,7 @@ El pipeline de ablaciones utiliza un modelo híbrido optimizado para costo y est
 
 ```
 1. Disparo On-Demand (make ablation-ec2-run / ablation-remote)
-       │  Obtiene ec2_runner_instance_id de los outputs de Terraform
+       │  Obtiene el INSTANCE_ID dinámicamente vía aws ec2 describe-instances
        ▼
 2. Encendido de la VM (aws ec2 start-instances)
        │  Espera estado 'running' y agente SSM 'Online'
@@ -138,7 +138,7 @@ make ablation-deploy-output
 ### Opción 1: Ejecución Remota Automatizada con Make (Recomendada)
 
 Este método es 100% desatendido y no requiere claves SSH ni actualizar tags en EC2. El comando `make ablation-ec2-run` (o su alias `make ablation-remote`) realiza automáticamente todo el ciclo de disparo:
-1. Obtiene el `ec2_runner_instance_id` desde los outputs de Terraform del stack desplegado.
+1. Obtiene dinámicamente el `INSTANCE_ID` de la instancia EC2 desplegada usando `aws ec2 describe-instances`.
 2. Enciende la instancia EC2 (`aws ec2 start-instances`) y espera a que alcance el estado `running` y a que el agente SSM reporte estado `Online`.
 3. Ejecuta `aws ssm send-command` configurando dinámicamente los parámetros `SAMPLE_SIZE` y `SEED` en `/run/ablation/override.env` e iniciando el servicio `ablation@<EXPERIMENT>.service` (esperando automáticamente a que finalice el bootstrap de `cloud-init` si es el primer arranque).
 4. Al finalizar el experimento y publicar los resultados en DVC/Git, la instancia se apaga sola (`stopped`).
@@ -155,37 +155,24 @@ make ablation-ec2-run EXPERIMENT=B3 SEED=123 SAMPLE_SIZE=50
 make ablation-remote EXPERIMENT=B2 SEED=42 SAMPLE_SIZE=30
 ```
 
-#### Monitoreo opcional (la VM se apagará sola al terminar)
-Al ejecutar `make ablation-ec2-run`, la terminal imprimirá los comandos exactos con tu `CommandId` e `InstanceId`:
+#### Monitoreo y obtención de logs
+Para consultar el progreso y los logs de la instancia de forma interactiva o descargarlos a un archivo de texto:
+
 ```bash
-# Seguir los logs del experimento en tiempo real vía SSM:
+# Opción A: Descargar los logs más recientes de la consola EC2 a un archivo de texto (logs_ablations_latest.txt)
+make ablation-ec2-logs
+
+# Descargar logs a un archivo personalizado:
+make ablation-ec2-logs LOG_FILE=logs_ablations_b2.txt
+
+# Opción B: Seguir los logs del servicio systemd en tiempo real vía AWS SSM interactivo:
 aws ssm start-session --target "$INSTANCE_ID" --document-name AWS-StartInteractiveCommand \
   --parameters 'command=["journalctl -u ablation@B2 -f"]'
 ```
 
 ---
 
-### Opción 2: Ejecución Remota Manual vía AWS CLI + SSM (Sin SSH)
-
-Si prefieres ejecutar los pasos de encendido y envío del comando SSM manualmente usando los outputs de `make ablation-deploy-output`:
-
-```bash
-INSTANCE_ID=$(terraform -chdir=terraform/stacks/apps_base output -raw ec2_runner_instance_id)
-
-# 1. Encender la instancia (si está en estado 'stopped') y esperar a que arranque
-aws ec2 start-instances --instance-ids "$INSTANCE_ID"
-aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
-
-# 2. Disparar el experimento (B1, B2, B3) pasando SAMPLE_SIZE y SEED vía SSM
-aws ssm send-command \
-  --instance-ids "$INSTANCE_ID" \
-  --document-name "AWS-RunShellScript" \
-  --parameters 'commands=["mkdir -p /run/ablation && printf \"SAMPLE_SIZE=30\nSEED=42\n\" > /run/ablation/override.env && systemctl start --no-block ablation@B2.service"]'
-```
-
----
-
-### Opción 3: Ejecución Local / Workstation
+### Opción 2: Ejecución Local / Workstation
 
 Si ejecutas los experimentos en tu entorno local o en una VM dedicada de desarrollo:
 
@@ -400,6 +387,8 @@ make ablation-destroy                        # Destruye la infraestructura despl
 make ablation-ec2-run EXPERIMENT=B2                        # Enciende EC2 + dispara B2 vía SSM (SAMPLE_SIZE=30, SEED=42)
 make ablation-ec2-run EXPERIMENT=B1 SEED=42 SAMPLE_SIZE=30 # Personaliza experimento, semilla y muestra
 make ablation-remote EXPERIMENT=B3 SEED=123 SAMPLE_SIZE=50 # Alias de ablation-ec2-run
+make ablation-ec2-logs                                     # Descarga la salida de consola de EC2 a logs_ablations_latest.txt
+make ablation-ec2-logs LOG_FILE=logs_b2.txt                # Descarga la salida a un archivo personalizado
 
 # ── Ejecución desatendida local / workstation ──
 make ablation-job EXPERIMENT=B2              # corre pipeline completo localmente + publica en DVC/git
