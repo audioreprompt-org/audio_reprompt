@@ -1,0 +1,30 @@
+[Unit]
+Description=Audio Reprompt Ablation Runner (%i)
+Documentation=https://github.com/audioreprompt-org/audio_reprompt
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/audio_reprompt
+EnvironmentFile=-/etc/ablation/env
+EnvironmentFile=-/run/ablation/override.env
+Environment=PYTHONUNBUFFERED=1
+Environment=KAGGLE_ISOLATE_RUNS=1
+
+# %i receives the experiment name, e.g. B1, B2, B3
+ExecStart=/opt/audio_reprompt/scripts/run_ablation_job.sh --experiment %i --shutdown
+
+# Safety shutdown if service failed, crashed, or was terminated by TimeoutStartSec
+ExecStopPost=/bin/bash -c 'if [ "$$SERVICE_RESULT" != "success" ]; then echo "[systemd] Job failed or timed out with result $$SERVICE_RESULT. Forcing VM shutdown."; sync; sleep 2; sudo shutdown -h now || true; fi'
+
+# Logging and limits (5 hours total: up to 4h on Kaggle + reprompt + CLAP scoring + publish)
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=18000
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

@@ -13,7 +13,9 @@ SPECIALIZED_WEIGHTS_URL = "https://huggingface.co/lukewys/laion_clap/resolve/mai
 class ClapModel:
     name = "laion_module"
 
-    def __init__(self, device: str, *, enable_fusion: bool = False, weights: Optional[str] = None) -> None:
+    def __init__(
+        self, device: str, *, enable_fusion: bool = False, weights: Optional[str] = None
+    ) -> None:
         """
         Initialize LAION-CLAP score.
 
@@ -40,13 +42,14 @@ class ClapModel:
         self.model.to(self.device)
         self.model.eval()
 
-
     @torch.no_grad()
     def embed_audio(self, audios: list[str]) -> torch.Tensor:
         embeddings: list[torch.Tensor] = []
         for audio_path in audios:
             audio_tensor = load_audio_tensor(audio_path, TARGET_SR).to(self.device)
-            emb = self.model.get_audio_embedding_from_data(audio_tensor, use_tensor=True)
+            emb = self.model.get_audio_embedding_from_data(
+                audio_tensor, use_tensor=True
+            )
             embeddings.append(emb)
 
         return torch.stack(embeddings, dim=0).squeeze(1)
@@ -56,15 +59,19 @@ class ClapModel:
         return self.model.get_text_embedding(texts, use_tensor=True)
 
     @classmethod
-    def calculate_score_with_embeddings(cls, text_embeddings: torch.Tensor, audio_embeddings: torch.Tensor) -> list[float]:
+    def calculate_score_with_embeddings(
+        cls, text_embeddings: torch.Tensor, audio_embeddings: torch.Tensor
+    ) -> list[float]:
         if text_embeddings.shape != audio_embeddings.shape:
-            raise ValueError(f"Shape mismatch: audio {audio_embeddings.shape} vs text {text_embeddings.shape} (esperado N x D emparejado)")
+            raise ValueError(
+                f"Shape mismatch: audio {audio_embeddings.shape} vs text {text_embeddings.shape} (esperado N x D emparejado)"
+            )
 
         text_embeddings = torch.nn.functional.normalize(text_embeddings, dim=-1)
         audio_embeddings = torch.nn.functional.normalize(audio_embeddings, dim=-1)
         sims = (audio_embeddings * text_embeddings).sum(dim=-1)
 
-        return sims.squeeze(-1).detach().cpu().tolist()
+        return sims.reshape(-1).detach().cpu().tolist()
 
     @torch.no_grad()
     def calculate_scores(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:

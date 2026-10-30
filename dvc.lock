@@ -1,4 +1,2 @@
 schema: '2.0'
-stages:
-  music-gen-baseline:
-    cmd: python models/scripts/GenMusicSpanio.py
+stages: {}
