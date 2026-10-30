@@ -60,6 +60,7 @@ class AblationConfig:
     system_prompt_modifier: str | None = None
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
+    reduce_random_effort: bool = False
     requires_audio: bool = True
 
 
@@ -86,13 +87,13 @@ GENERATION_ABLATIONS: dict[str, AblationConfig] = {
     ),
     # B3 — Nivel de Creatividad Inducida por Prompt y Penalizaciones
     "B3a": AblationConfig(
-        name="B3a — prompt determinista conservador", tag="B3a_prompt_determinista", system_prompt_modifier="Sé determinista y conservador", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
+        name="B3a — prompt determinista conservador", tag="B3a_prompt_determinista", system_prompt_modifier="Be deterministic and conservative", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
     ),
     "B3b": AblationConfig(
         name="B3b — prompt default pen=0.0", tag="B3b_default_pen0", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
     ),
     "B3c": AblationConfig(
-        name="B3c — prompt creativo e imaginativo", tag="B3c_prompt_creativo", system_prompt_modifier="Sé altamente creativo e imaginativo", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
+        name="B3c — prompt creativo e imaginativo", tag="B3c_prompt_creativo", system_prompt_modifier="Be highly creative and imaginative", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
     ),
     "B3d": AblationConfig(
         name="B3d — presence penalty 0.6", tag="B3d_presence_06", presence_penalty=0.6, requires_audio=True,
@@ -100,6 +101,9 @@ GENERATION_ABLATIONS: dict[str, AblationConfig] = {
     "B3e": AblationConfig(
         name="B3e — frequency penalty 0.6", tag="B3e_frequency_06", frequency_penalty=0.6, requires_audio=True,
     ),
+    "B3f": AblationConfig(
+            name="B3f — random effort none", tag="B3f_random_effort_none", reduce_random_effort=True, requires_audio=True,
+        ),
 }
 
 ALL_ABLATIONS = GENERATION_ABLATIONS
@@ -147,6 +151,7 @@ def run_reprompt(cfg: AblationConfig, sample_size: int, seed: int, run_id: str =
             system_prompt_modifier=cfg.system_prompt_modifier,
             presence_penalty=cfg.presence_penalty,
             frequency_penalty=cfg.frequency_penalty,
+            reduce_random_effort=cfg.reduce_random_effort,
             tag=run_tag,
             output_dir=str(ABLATIONS_REPROMPTS_PATH),
         )

@@ -195,7 +195,10 @@ ablation-B3d:
 ablation-B3e:
 	$(ABLATION_CMD) --experiment B3e $(GENERATION_ARGS)
 
-ablation-B3: ablation-B3a ablation-B3b ablation-B3c ablation-B3d ablation-B3e
+ablation-B3f:
+	$(ABLATION_CMD) --experiment B3f $(GENERATION_ARGS)
+
+ablation-B3: ablation-B3a ablation-B3b ablation-B3c ablation-B3d ablation-B3e ablation-B3f
 
 ablation-generation: ablation-B1 ablation-B2 ablation-B3
 

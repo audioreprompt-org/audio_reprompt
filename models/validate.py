@@ -67,6 +67,7 @@ def generate_reprompts(
     system_prompt_modifier: str | None = None,
     presence_penalty: float | None = None,
     frequency_penalty: float | None = None,
+    reduce_random_effort: bool = False,
     tag: str = "",
     output_dir: str | None = None,
 ):
@@ -96,6 +97,7 @@ def generate_reprompts(
                     system_prompt_modifier=system_prompt_modifier,
                     presence_penalty=presence_penalty,
                     frequency_penalty=frequency_penalty,
+                    reduce_random_effort=reduce_random_effort
                 ),
             }
         )

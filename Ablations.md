@@ -321,11 +321,12 @@ make ablation-B2-full
 
 | Variante | Instrucción de Prompt (System) | Penalizaciones (presence/frequency) | Comportamiento esperado |
 |----------|--------------------------------|-------------------------------------|-------------------------|
-| B3-a     | "Sé determinista y conservador" | `0.0`, `0.0` | Conservador, limitando la entropía |
+| B3-a     | "Be deterministic and conservative" | `0.0`, `0.0` | Conservador, limitando la entropía |
 | B3-b     | *(Default)* | `0.0`, `0.0` | Balanceado (default `config.yaml`) |
-| B3-c     | "Sé altamente creativo e imaginativo" | `0.0`, `0.0` | Creativo, mayor riqueza de vocabulario |
+| B3-c     | "Be highly creative and imaginative" | `0.0`, `0.0` | Creativo, mayor riqueza de vocabulario |
 | B3-d     | *(Default)* | `0.6` (presence) | Promueve la introducción de nuevos términos |
 | B3-e     | *(Default)* | `0.6` (frequency) | Reduce el uso reiterativo de mismos descriptores |
+| B3-f     | *(Default)* | `reasoning_effort=none` | **Desactiva el CoT.** Evalúa si el "razonamiento" oculto realmente mejora la alineación texto-audio o si solo agrega latencia/costo. |
 
 > [!IMPORTANT]
 > Dado que hiperparámetros como `temperature`/`top_p` a menudo son ignorados en los modelos de estilo "reasoning/thinking" (como `kimi-k2-thinking`), la ablación B3 ahora explora vías alternativas (prompt engineering explícito y parámetros de penalización en la API) para medir su impacto riguroso en la generación del reprompt sin requerir `gpt-5-nano`.

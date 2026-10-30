@@ -87,6 +87,7 @@ def mcu_reprompt(
     system_prompt_modifier: str | None = None,
     presence_penalty: float | None = None,
     frequency_penalty: float | None = None,
+    reduce_random_effort: bool = False,
 ) -> str:
     # Check disk cache first
     key = _cache_key(
@@ -117,6 +118,8 @@ def mcu_reprompt(
         kwargs["presence_penalty"] = presence_penalty
     if frequency_penalty is not None:
         kwargs["frequency_penalty"] = frequency_penalty
+    if reduce_random_effort:
+        kwargs["reasoning_effort"] = "none"
 
     response = get_client(model).chat.completions.create(**kwargs)
     result = response.choices[0].message.content
