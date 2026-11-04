@@ -3,24 +3,29 @@
 # run_ablation_job.sh — on-demand execution runner for ablation experiments.
 #
 # Designed to run unattended on a virtual machine (or local workstation):
-#   1. Acquires a lock to prevent multiple local executions.
+#   1. Acquires an execution lock (queueing by default) across multi-user environments.
 #   2. Hard-syncs the repository to $REMOTE/$BRANCH (+ uv sync --frozen) and
 #      re-executes itself from the updated checkout.
 #   3. Loads credentials (.env and/or AWS Secrets Manager) and fails fast if
 #      the database, Kaggle or (when publishing) git push are not usable.
-#   4. Pulls DVC inputs and runs the ablation pipeline with per-run Kaggle isolation.
+#   4. Pulls DVC inputs and runs the ablation pipeline with per-run Kaggle isolation
+#      and active per-job timeout.
 #   5. Publishes results concurrency-safely via ablation_publish.sh (DVC + git).
-#   6. Optionally powers off / stops the VM when execution completes.
+#   6. Optionally powers off / stops the VM when execution completes (safe handoff).
 #
 # Usage:
 #   scripts/run_ablation_job.sh --experiment B2
 #   scripts/run_ablation_job.sh -e B1 --sample-size 50 --seed 42 --shutdown
 #   scripts/run_ablation_job.sh -e B2 --secret-name audio-db-secrets --shutdown
+#   scripts/run_ablation_job.sh -e B2 --no-wait --job-timeout 14400
 #   scripts/run_ablation_job.sh -e B2 --no-sync --no-publish   # local dev
 #
 # Environment variables (on EC2 provided by /etc/ablation/env via systemd):
 #   AUTO_SHUTDOWN=1          Automatically stop/poweroff VM when done
 #   ABLATION_BRANCH=...      Branch to sync, run and publish to
+#   ABLATION_LOCK_DIR=...    Lock directory for execution queueing (/tmp/ablation_job.lock.d)
+#   ABLATION_WAIT_LOCK=1     Wait in queue if lock held (1: wait, 0: fail fast)
+#   JOB_TIMEOUT_SEC=39600    Maximum active job execution timeout in seconds (11h default)
 #   DB_SECRET_NAME=...       AWS Secrets Manager secret name/ARN for RDS credentials
 #   KAGGLE_SECRET_NAME=...   AWS Secrets Manager secret name for Kaggle credentials
 #   LLM_SECRET_NAME=...      AWS Secrets Manager secret name for LLM API keys
@@ -48,7 +53,9 @@ KAGGLE_KEY_ARG=""
 SHUTDOWN="${AUTO_SHUTDOWN:-0}"
 DO_PUBLISH=1
 DO_SYNC=1
-LOCK_FILE="/tmp/ablation_job.lock"
+LOCK_DIR="${ABLATION_LOCK_DIR:-/tmp/ablation_job.lock.d}"
+WAIT_LOCK="${ABLATION_WAIT_LOCK:-1}"
+JOB_TIMEOUT_SEC="${JOB_TIMEOUT_SEC:-39600}"
 
 log() { printf '[job %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
@@ -72,6 +79,8 @@ Options:
       --kaggle-key KEY       Kaggle API key for this run (overrides environment)
       --git-ssh-secret NAME  AWS Secrets Manager secret holding a GitHub deploy key (for publish)
       --shutdown             Shut down / power off the VM upon completion
+      --no-wait              Fail immediately instead of queueing if lock is held
+      --job-timeout SEC      Active execution timeout in seconds (default: 39600 = 11h)
       --no-publish           Skip publishing DVC outputs and git commit
       --no-sync              Don't hard-sync the checkout to REMOTE/BRANCH (local dev)
   -h, --help                 Show this help message
@@ -93,12 +102,70 @@ while [[ $# -gt 0 ]]; do
     --kaggle-key) KAGGLE_KEY_ARG="$2"; shift 2 ;;
     --git-ssh-secret) GIT_SSH_SECRET_NAME="$2"; shift 2 ;;
     --shutdown) SHUTDOWN=1; shift ;;
+    --no-wait) WAIT_LOCK=0; shift ;;
+    --job-timeout)
+      [[ -n "${2:-}" && "$2" =~ ^[0-9]+$ && "$2" -gt 0 ]] || die "--job-timeout requires a positive integer (got: ${2:-})"
+      JOB_TIMEOUT_SEC="$2"
+      shift 2
+      ;;
     --no-publish) DO_PUBLISH=0; shift ;;
     --no-sync) DO_SYNC=0; shift ;;
     -h | --help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument: $1" ;;
   esac
 done
+
+[[ "$JOB_TIMEOUT_SEC" =~ ^[0-9]+$ && "$JOB_TIMEOUT_SEC" -gt 0 ]] || die "JOB_TIMEOUT_SEC must be a positive integer (got: $JOB_TIMEOUT_SEC)"
+
+flock_fd_nonblock() {
+  local fd="$1"
+  if command -v flock >/dev/null 2>&1; then
+    flock -n "$fd"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import fcntl, sys; fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX | fcntl.LOCK_NB)' "$fd" 2>/dev/null
+  else
+    return 0
+  fi
+}
+
+flock_fd_block() {
+  local fd="$1"
+  if command -v flock >/dev/null 2>&1; then
+    flock "$fd"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import fcntl, sys; fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX)' "$fd"
+  else
+    return 0
+  fi
+}
+
+run_with_timeout() {
+  local duration="$1"
+  shift
+  if [[ "$duration" -gt 0 ]]; then
+    if command -v timeout >/dev/null 2>&1; then
+      timeout --foreground -k 60 "$duration" "$@"
+      return $?
+    elif command -v gtimeout >/dev/null 2>&1; then
+      gtimeout --foreground -k 60 "$duration" "$@"
+      return $?
+    fi
+  fi
+  "$@"
+}
+
+other_jobs_active_or_queued() {
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl list-units --type=service --state=active,activating,reloading --plain --no-legend "ablation@*.service" 2>/dev/null \
+      | awk -v self="${ABLATION_UNIT_NAME:-}" '$1 != "" && $1 != self { found=1 } END { exit (found ? 0 : 1)}'; then
+      return 0
+    fi
+  fi
+  if [[ -d "$LOCK_DIR" ]] && ! (exec 201<"$LOCK_DIR" && flock_fd_nonblock 201) 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
@@ -112,27 +179,53 @@ fi
 
 # ── 1. Acquire execution lock ────────────────────────────────────────────────
 # After a self re-exec (step 2) fd 200 is inherited and still holds the lock.
+# Opening a directory read-only avoids Ubuntu /tmp sticky-bit / fs.protected_regular=2
+# permission issues when multiple OS users run jobs on the same machine.
 if [[ -z "${ABLATION_JOB_REEXEC:-}" ]]; then
-  exec 200>"$LOCK_FILE"
-  if command -v flock >/dev/null 2>&1; then
-    if ! flock -n 200; then
-      die "Another ablation job is already running on this machine (locked by $LOCK_FILE)."
+  mkdir -p "$LOCK_DIR" 2>/dev/null || true
+  chmod 0777 "$LOCK_DIR" 2>/dev/null || true
+  exec 200<"$LOCK_DIR"
+  if ! flock_fd_nonblock 200; then
+    if [[ "$WAIT_LOCK" -eq 0 ]]; then
+      die "Another ablation job is already running on this machine (locked by $LOCK_DIR)."
+    else
+      log "Another ablation job is currently running; waiting in queue for lock ($LOCK_DIR)..."
+      flock_fd_block 200 || die "Failed while waiting for execution lock ($LOCK_DIR)."
+      log "✓ Execution lock acquired."
     fi
   fi
 fi
 
-# Handle post-execution actions (shutdown if requested)
+export ABLATION_LOCK_ACQUIRED_AT="${ABLATION_LOCK_ACQUIRED_AT:-$(date +%s)}"
+
+# Handle post-execution actions (shutdown if requested, multi-user handoff)
 cleanup_and_shutdown() {
   local exit_code=$?
   trap - EXIT  # disable trap to prevent re-entrancy
+
+  if [[ "$exit_code" -ne 0 && "$DO_SYNC" -eq 1 && -n "${RUN_ID:-}" ]]; then
+    # While still holding fd 200, clean up any partial failed-run artifacts
+    # so the next queued job's publish never sweeps them up.
+    find data/ablations -mindepth 2 -maxdepth 2 -name "*${RUN_ID}*" -exec rm -rf {} + 2>/dev/null || true
+    rm -rf ".kaggle_staging/${RUN_ID}" 2>/dev/null || true
+  fi
+
+  # Release the execution lock immediately
+  exec 200<&- 2>/dev/null || true
+
   if [[ "$SHUTDOWN" -eq 1 ]]; then
-    log "Job finished with status $exit_code. Initiating VM shutdown..."
-    sync
-    sleep 3
-    if command -v shutdown >/dev/null 2>&1; then
-      sudo shutdown -h now || shutdown -h now || true
-    elif command -v poweroff >/dev/null 2>&1; then
-      sudo poweroff || poweroff || true
+    sleep "${ABLATION_HANDOFF_SLEEP_SEC:-2}"
+    if other_jobs_active_or_queued; then
+      log "Job finished with status $exit_code. Other ablation job(s) are active or queued; skipping VM shutdown."
+    else
+      log "Job finished with status $exit_code. No other ablation jobs active; initiating VM shutdown..."
+      sync
+      sleep "${ABLATION_SHUTDOWN_SLEEP_SEC:-3}"
+      if command -v shutdown >/dev/null 2>&1; then
+        sudo shutdown -h now || shutdown -h now || true
+      elif command -v poweroff >/dev/null 2>&1; then
+        sudo poweroff || poweroff || true
+      fi
     fi
   fi
   exit "$exit_code"
@@ -195,6 +288,7 @@ log "  Sample Size: $SAMPLE_SIZE"
 log "  Seed:        $SEED"
 log "  Run ID:      $RUN_ID"
 log "  Branch:      $BRANCH @ $(git rev-parse --short HEAD)"
+log "  Job Timeout: ${JOB_TIMEOUT_SEC}s"
 log "  Publish:     $DO_PUBLISH"
 log "  Shutdown:    $SHUTDOWN"
 log "============================================================"
@@ -273,17 +367,30 @@ if [[ -f data/prompts.dvc ]] && ! ls data/prompts/*.csv >/dev/null 2>&1; then
 fi
 if [[ -f data/ablations.dvc ]]; then
   log "Pulling existing ablation results via DVC (data/ablations.dvc)..."
-  uv run --quiet dvc pull data/ablations.dvc || log "WARNING: dvc pull data/ablations.dvc had missing files or failed (will retry during publish)"
+  if [[ "$DO_SYNC" -eq 1 ]]; then
+    uv run --quiet dvc pull --force data/ablations.dvc || log "WARNING: dvc pull data/ablations.dvc had missing files or failed (will retry during publish)"
+  else
+    uv run --quiet dvc pull data/ablations.dvc || log "WARNING: dvc pull data/ablations.dvc had missing files or failed (will retry during publish)"
+  fi
 fi
 
 # ── 5. Execution ─────────────────────────────────────────────────────────────
 export KAGGLE_ISOLATE_RUNS="${KAGGLE_ISOLATE_RUNS:-1}"
 export PYTHONUNBUFFERED=1
 
+ELAPSED_SEC=$(( $(date +%s) - ABLATION_LOCK_ACQUIRED_AT ))
+if [[ "$JOB_TIMEOUT_SEC" -gt 0 ]]; then
+  REMAINING_SEC=$(( JOB_TIMEOUT_SEC - ELAPSED_SEC ))
+  (( REMAINING_SEC > 60 )) || die "Per-job execution timeout (${JOB_TIMEOUT_SEC}s) exhausted before pipeline start."
+  log "Active execution budget: ${REMAINING_SEC}s remaining (limit: ${JOB_TIMEOUT_SEC}s, elapsed: ${ELAPSED_SEC}s)"
+else
+  REMAINING_SEC=0
+fi
+
 # Invoke the runner directly (credentials are already in the environment);
 # avoids depending on `uv run --env-file .env`, which doesn't exist on EC2.
 log "Running experiment $EXPERIMENT (Phase: full)..."
-uv run python -m models.ablation_runner \
+run_with_timeout "$REMAINING_SEC" uv run python -m models.ablation_runner \
   --experiment "$EXPERIMENT" \
   --sample-size "$SAMPLE_SIZE" \
   --seed "$SEED" \
@@ -295,7 +402,7 @@ log "✓ Pipeline execution completed successfully for $EXPERIMENT ($RUN_ID)."
 # ── 6. Publication ───────────────────────────────────────────────────────────
 if [[ "$DO_PUBLISH" -eq 1 ]]; then
   log "Publishing results (updating data/ablations.dvc and git commit)..."
-  ./scripts/ablation_publish.sh \
+  run_with_timeout "${PUBLISH_TIMEOUT_SEC:-1800}" ./scripts/ablation_publish.sh \
     --run-id "$RUN_ID" \
     --branch "$BRANCH" \
     --remote "$REMOTE" \

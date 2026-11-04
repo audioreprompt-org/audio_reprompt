@@ -22,7 +22,7 @@ Environment:
     KAGGLE_ISOLATE_RUNS   If "1"/"true", every run_id gets its own dataset, kernel and
                           staging dir (safe for concurrent runs); remote copies are
                           deleted after a successful download.
-    KAGGLE_TIMEOUT        Max seconds to wait for the kernel (default: 14400)
+    KAGGLE_TIMEOUT        Max seconds to wait for the kernel (default: 32400)
 """
 
 import argparse
@@ -46,7 +46,7 @@ NB_FILENAME = "ablation-audio-gen.ipynb"
 
 ABLATIONS_AUDIO_PATH = PROJECT_ROOT / "data" / "ablations" / "audio"
 
-DEFAULT_TIMEOUT = int(os.getenv("KAGGLE_TIMEOUT", "14400"))
+DEFAULT_TIMEOUT = int(os.getenv("KAGGLE_TIMEOUT", "32400"))
 ISOLATE_RUNS = os.getenv("KAGGLE_ISOLATE_RUNS", "").strip().lower() in ("1", "true", "yes")
 
 
@@ -390,6 +390,7 @@ def _generate_notebook(target: KaggleTarget = DEFAULT_TARGET) -> Path:
             "    # fail the kernel so the runner reports an error instead of 'complete'\n"
             '    raise RuntimeError(f"No CSV files found under {INPUT_ROOT}")\n'
             "\n"
+            "total_wavs = 0\n"
             "for csv_file in csv_files:\n"
             "    # use CSV stem as subdirectory name\n"
             "    sub_dir = OUTPUT_DIR / csv_file.stem\n"
@@ -415,12 +416,13 @@ def _generate_notebook(target: KaggleTarget = DEFAULT_TARGET) -> Path:
             "    # zip each subdirectory for easier download\n"
             "    archive = OUTPUT_DIR / csv_file.stem\n"
             '    shutil.make_archive(str(archive), "zip", str(sub_dir))\n'
+            '    total_wavs += len(list(sub_dir.glob("*.wav")))\n'
+            "    shutil.rmtree(sub_dir, ignore_errors=True)\n"
             '    print(f"  ✓ Archived: {csv_file.stem}.zip")\n'
         ),
         _code_cell(
-            'wav_count = len(list(OUTPUT_DIR.rglob("*.wav")))\n'
             'zip_count = len(list(OUTPUT_DIR.glob("*.zip")))\n'
-            'print(f"\\nDone! {wav_count} WAV files in {zip_count} archives")'
+            'print(f"\\nDone! {total_wavs} WAV files in {zip_count} archives")'
         ),
     ]
 
@@ -438,6 +440,7 @@ def _generate_notebook(target: KaggleTarget = DEFAULT_TARGET) -> Path:
         "cells": cells,
     }
 
+    target.kernel_dir.mkdir(parents=True, exist_ok=True)
     nb_path = target.kernel_dir / NB_FILENAME
     nb_path.write_text(json.dumps(notebook, indent=2))
     print(f"  Notebook generated: {nb_path}")

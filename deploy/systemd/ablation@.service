@@ -5,25 +5,28 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=oneshot
+Type=exec
 User=ubuntu
 Group=ubuntu
 WorkingDirectory=/opt/audio_reprompt
 EnvironmentFile=-/etc/ablation/env
 EnvironmentFile=-/run/ablation/override.env
+EnvironmentFile=-/run/ablation/%i.env
 Environment=PYTHONUNBUFFERED=1
 Environment=KAGGLE_ISOLATE_RUNS=1
+Environment="ABLATION_UNIT_NAME=%n"
 
 # %i receives the experiment name, e.g. B1, B2, B3
 ExecStart=/opt/audio_reprompt/scripts/run_ablation_job.sh --experiment %i --shutdown
 
-# Safety shutdown if service failed, crashed, or was terminated by TimeoutStartSec
-ExecStopPost=/bin/bash -c 'if [ "$$SERVICE_RESULT" != "success" ]; then echo "[systemd] Job failed or timed out with result $$SERVICE_RESULT. Forcing VM shutdown."; sync; sleep 2; sudo shutdown -h now || true; fi'
+# Safety shutdown if service failed, crashed, or was terminated by TimeoutStartSec / RuntimeMaxSec
+ExecStopPost=/bin/bash -c 'if [ "$$SERVICE_RESULT" != "success" ]; then sleep 2; OTHER_BUSY=0; while read -r u _; do if [ -n "$$u" ] && [ "$$u" != "%n" ]; then OTHER_BUSY=1; fi; done < <(systemctl list-units --type=service --state=active,activating,reloading --plain --no-legend "ablation@*.service" 2>/dev/null || true); if [ -d /tmp/ablation_job.lock.d ] && command -v flock >/dev/null 2>&1 && ! (exec 201</tmp/ablation_job.lock.d && flock -n 201) 2>/dev/null; then OTHER_BUSY=1; fi; if [ "$$OTHER_BUSY" -eq 1 ]; then echo "[systemd] Job %n ended with $$SERVICE_RESULT, but other ablation job(s) are active/queued; skipping VM shutdown."; else echo "[systemd] Job %n failed or timed out with result $$SERVICE_RESULT and no other jobs remain. Forcing VM shutdown."; sync; sleep 2; sudo shutdown -h now || true; fi; fi'
 
-# Logging and limits (5 hours total: up to 4h on Kaggle + reprompt + CLAP scoring + publish)
+# Logging and limits (24 hours outer ceiling to accommodate queued jobs; active runtime capped at 11h inside runner)
 StandardOutput=journal+console
 StandardError=journal+console
-TimeoutStartSec=18000
+TimeoutStartSec=300
+RuntimeMaxSec=86400
 KillMode=process
 
 [Install]

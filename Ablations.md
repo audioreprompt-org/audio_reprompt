@@ -59,7 +59,7 @@ El pipeline de ablaciones utiliza un modelo híbrido optimizado para costo y est
        │  (En primer arranque: cloud-init clona el repo, corre uv sync e instala unidades systemd)
        ▼
 3. Disparo vía AWS SSM (aws ssm send-command)
-       │  Escribe SAMPLE_SIZE y SEED en /run/ablation/override.env
+       │  Escribe SAMPLE_SIZE y SEED en /run/ablation/<EXPERIMENT>.env
        │  Inicia ablation@<EXPERIMENT>.service (--no-block)
        ▼
 4. Sincronización y Validación (run_ablation_job.sh)
@@ -82,13 +82,18 @@ El pipeline de ablaciones utiliza un modelo híbrido optimizado para costo y est
 
 ### Protección contra Costos y Guard de Inactividad
 
-Para evitar cobros accidentales por instancias olvidadas o procesos colgados:
-1. **Apagado en Éxito y en Error (`run_ablation_job.sh`)**: Tanto si el pipeline termina exitosamente como si falla un preflight o fase, el trap del script ejecuta un `shutdown -h now` seguro y no reentrante.
-2. **Fail-Safe de Systemd (`ExecStopPost`)**: Si el proceso es terminado por `TimeoutStartSec` (5 horas) o muere por OOM, systemd detecta `$SERVICE_RESULT != "success"` y fuerza el apagado.
-3. **Idle Guard para Instancias "Zombie" (`ablation-idle-guard.timer`)**:
-   * Corre cada 5 minutos.
-   * Si no hay ningún servicio `ablation@*.service` activo y el tiempo de actividad (`uptime`) supera las **4 horas** (`14400` segundos por defecto), apaga la VM automáticamente.
-   * **Inmune a esperas de Kaggle**: Dado que monitorea el estado del servicio systemd y no la CPU, la VM nunca se apagará mientras esté esperando que Kaggle termine de sintetizar los audios.
+Para evitar cobros accidentales por instancias olvidadas o procesos colgados mientras se soporta concurrencia de múltiples usuarios:
+1. **Cola Secuencial Multiusuario (`flock` en `/tmp/ablation_job.lock.d`)**: Varios usuarios pueden despachar experimentos simultáneamente (como `B1`, `B2` y `B3`, incluso con `SAMPLE_SIZE=100`). Los jobs se encolan de forma segura y ordenada en la VM y solo el último job en terminar efectúa el apagado de la instancia.
+2. **Timeouts y Límites de Ejecución**:
+   * **Timeout por job**: **11 horas** (`39600`s, iniciando tras adquirir el lock en `run_ablation_job.sh`).
+   * **Límite externo en systemd**: Techo global de **24 horas** (`RuntimeMaxSec=86400`, `Type=exec`) para permitir que hasta 3 jobs consecutivos completen su cola.
+3. **Apagado en Éxito y en Error (`run_ablation_job.sh`)**: Tanto si el pipeline termina exitosamente como si falla un preflight o fase, el trap del script ejecuta un apagado seguro (salvo que existan otros jobs encolados o activos).
+4. **Fail-Safe de Systemd (`ExecStopPost`)**: Si el proceso falla o es terminado por timeout/OOM, `ExecStopPost` verifica si existen otras unidades `ablation@*.service` activas/encoladas o si el lock `/tmp/ablation_job.lock.d` está ocupado; solo fuerza el apagado de la VM si no quedan otros jobs pendientes.
+5. **Idle Guard para Instancias "Zombie" (`ablation-idle-guard.timer`)**:
+   * Corre periódicamente.
+   * Monitorea tanto unidades `ablation@*.service` (`active`/`activating`) como el lock de ejecución (`/tmp/ablation_job.lock.d`).
+   * Apaga la VM automáticamente tras **30 minutos** (`1800` segundos por defecto) de **inactividad real continua** (no desde el arranque total), evitando cobros innecesarios sin interrumpir corridas largas o encoladas.
+   * **Inmune a esperas de Kaggle**: Dado que monitorea el estado del servicio systemd y el lock (y no la CPU), la VM nunca se apagará mientras esté esperando que Kaggle termine de sintetizar los audios.
    * **Escape Hatch manual**: Para sesiones de mantenimiento interactivo o depuración manual, se puede desactivar creando el archivo `/tmp/disable_idle_guard`.
 
 ---
@@ -140,7 +145,7 @@ make ablation-deploy-output
 Este método es 100% desatendido y no requiere claves SSH ni actualizar tags en EC2. El comando `make ablation-ec2-run` (o su alias `make ablation-remote`) realiza automáticamente todo el ciclo de disparo:
 1. Obtiene dinámicamente el `INSTANCE_ID` de la instancia EC2 desplegada usando `aws ec2 describe-instances`.
 2. Enciende la instancia EC2 (`aws ec2 start-instances`) y espera a que alcance el estado `running` y a que el agente SSM reporte estado `Online`.
-3. Ejecuta `aws ssm send-command` configurando dinámicamente los parámetros `SAMPLE_SIZE` y `SEED` en `/run/ablation/override.env` e iniciando el servicio `ablation@<EXPERIMENT>.service` (esperando automáticamente a que finalice el bootstrap de `cloud-init` si es el primer arranque).
+3. Ejecuta `aws ssm send-command` configurando dinámicamente los parámetros `SAMPLE_SIZE` y `SEED` en `/run/ablation/<EXPERIMENT>.env` e iniciando el servicio `ablation@<EXPERIMENT>.service` (esperando automáticamente a que finalice el bootstrap de `cloud-init` si es el primer arranque).
 4. Al finalizar el experimento y publicar los resultados en DVC/Git, la instancia se apaga sola (`stopped`).
 
 ```bash
@@ -214,7 +219,7 @@ make ablation-publish RUN_ID=R20261022_204000
 La fase de síntesis de audio está orquestada por `models/kaggle_runner.py`:
 
 * **Aislamiento por Run (`KAGGLE_ISOLATE_RUNS=1`)**: Cada ejecución genera un dataset (`ablation-reprompts-<run_id>`) y un notebook (`ablation-audio-gen-<run_id>`) dedicados en Kaggle. Esto previene que ejecuciones paralelas sobreescriban los CSVs de entrada o los audios descargados.
-* **Timeout Extendido**: Configurado a **4 horas** (`14400` segundos, configurable vía `KAGGLE_TIMEOUT`) para soportar lotes grandes de audio sin interrupciones.
+* **Timeout Extendido**: Configurado a **9 horas** (`32400` segundos por defecto vía `KAGGLE_TIMEOUT`) para soportar lotes grandes de audio sin interrupciones.
 * **Limpieza Automática**: Tras descargar los archivos `.wav`, los recursos temporales creados en Kaggle son eliminados automáticamente para no saturar la cuenta.
 
 #### Comandos directos de Kaggle (Uso avanzado / depuración):
