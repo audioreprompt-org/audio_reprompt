@@ -48,9 +48,8 @@ def transform(
     k: int = 10,
     filter_dimensions: tuple[str, ...] | None = FILTER_DIMENSIONS_DEFAULT,
     system_prompt_modifier: str | None = None,
-    presence_penalty: float | None = None,
-    frequency_penalty: float | None = None,
     reduce_random_effort: bool = False,
+    reasoning_effort: str | None = None,
 ):
     # 1. encode user prompt without preprocessing
     if not (
@@ -101,7 +100,6 @@ def transform(
         model=model,
         prompt_version=prompt_version,
         system_prompt_modifier=system_prompt_modifier,
-        presence_penalty=presence_penalty,
-        frequency_penalty=frequency_penalty,
-        reduce_random_effort=reduce_random_effort
+        reduce_random_effort=reduce_random_effort,
+        reasoning_effort=reasoning_effort,
     )

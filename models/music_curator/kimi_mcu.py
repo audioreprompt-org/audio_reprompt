@@ -29,22 +29,23 @@ def _cache_key(
     crossmodal_descriptors: str,
     music_captions: str,
     system_prompt_modifier: str | None,
-    presence_penalty: float | None,
-    frequency_penalty: float | None,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Deterministic hash of all inputs that affect the LLM response."""
-    payload = json.dumps(
-        {
-            "model": model,
-            "prompt_version": prompt_version,
-            "crossmodal_descriptors": crossmodal_descriptors,
-            "music_captions": music_captions,
-            "system_prompt_modifier": system_prompt_modifier,
-            "presence_penalty": presence_penalty,
-            "frequency_penalty": frequency_penalty,
-        },
-        sort_keys=True,
-    )
+    fields = {
+        "model": model,
+        "prompt_version": prompt_version,
+        "crossmodal_descriptors": crossmodal_descriptors,
+        "music_captions": music_captions,
+        "system_prompt_modifier": system_prompt_modifier,
+        # Legacy keys kept as None so previously cached responses stay valid
+        "presence_penalty": None,
+        "frequency_penalty": None,
+    }
+    # Only include reasoning_effort when set, so previously cached keys stay valid
+    if reasoning_effort is not None:
+        fields["reasoning_effort"] = reasoning_effort
+    payload = json.dumps(fields, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -85,14 +86,16 @@ def mcu_reprompt(
     model: str = OPENAI_GPT_LUNA_MODEL,
     prompt_version: str = "V3",
     system_prompt_modifier: str | None = None,
-    presence_penalty: float | None = None,
-    frequency_penalty: float | None = None,
     reduce_random_effort: bool = False,
+    reasoning_effort: str | None = None,
 ) -> str:
+    # An explicit reasoning_effort takes precedence over reduce_random_effort
+    effective_reasoning_effort = reasoning_effort or ("none" if reduce_random_effort else None)
+
     # Check disk cache first
     key = _cache_key(
         model, prompt_version, crossmodal_descriptors, music_captions,
-        system_prompt_modifier, presence_penalty, frequency_penalty
+        system_prompt_modifier, effective_reasoning_effort,
     )
     cached = _read_cache(key)
     if cached is not None:
@@ -114,12 +117,8 @@ def mcu_reprompt(
     ]
 
     kwargs: dict = {"model": model, "messages": messages}
-    if presence_penalty is not None:
-        kwargs["presence_penalty"] = presence_penalty
-    if frequency_penalty is not None:
-        kwargs["frequency_penalty"] = frequency_penalty
-    if reduce_random_effort:
-        kwargs["reasoning_effort"] = "none"
+    if effective_reasoning_effort is not None:
+        kwargs["reasoning_effort"] = effective_reasoning_effort
 
     response = get_client(model).chat.completions.create(**kwargs)
     result = response.choices[0].message.content

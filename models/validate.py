@@ -65,9 +65,8 @@ def generate_reprompts(
     k: int = 10,
     filter_dimensions: tuple[str, ...] | None = None,
     system_prompt_modifier: str | None = None,
-    presence_penalty: float | None = None,
-    frequency_penalty: float | None = None,
     reduce_random_effort: bool = False,
+    reasoning_effort: str | None = None,
     tag: str = "",
     output_dir: str | None = None,
 ):
@@ -95,9 +94,8 @@ def generate_reprompts(
                     k=k,
                     filter_dimensions=filter_dimensions,
                     system_prompt_modifier=system_prompt_modifier,
-                    presence_penalty=presence_penalty,
-                    frequency_penalty=frequency_penalty,
-                    reduce_random_effort=reduce_random_effort
+                    reduce_random_effort=reduce_random_effort,
+                    reasoning_effort=reasoning_effort,
                 ),
             }
         )

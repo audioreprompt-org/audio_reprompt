@@ -15,7 +15,7 @@
 - [Ablaciones de Generación (MCU Re-Prompt)](#ablaciones-de-generación-mcu-re-prompt)
   - [B1. Versión de Prompt](#b1-versión-de-prompt)
   - [B2. Filtro de Dimensiones (Impacto en Audio)](#b2-filtro-de-dimensiones-impacto-en-audio)
-  - [B3. Parámetros de Modelo (Penalizaciones y Creatividad)](#b3-parámetros-de-modelo-penalizaciones-y-creatividad)
+  - [B3. Parámetros de Modelo (Reasoning Effort y Creatividad)](#b3-parámetros-de-modelo-reasoning-effort-y-creatividad)
 - [Orden de Ejecución](#orden-de-ejecución)
 - [Inputs del Análisis Estadístico](#inputs-del-análisis-estadístico)
 - [Comandos Make](#comandos-make)
@@ -318,23 +318,23 @@ make ablation-B2-full
 
 ---
 
-### B3. Parámetros de Modelo (Penalizaciones y Creatividad)
+### B3. Parámetros de Modelo (Reasoning Effort y Creatividad)
 
 **Objetivo**: Encontrar la configuración que maximice la alineación sin sacrificar diversidad, ajustada para modelos avanzados que omiten temperature/top_p de forma predeterminada, como `kimi-k2-thinking`.
 
-**Variable**: Nivel de creatividad en instrucciones de prompt y variaciones en parámetros de penalización (`presence_penalty` / `frequency_penalty`).
+**Variable**: Nivel de creatividad en instrucciones de prompt y nivel de razonamiento (`reasoning_effort`).
 
-| Variante | Instrucción de Prompt (System) | Penalizaciones (presence/frequency) | Comportamiento esperado |
+| Variante | Instrucción de Prompt (System) | Parámetros API | Comportamiento esperado |
 |----------|--------------------------------|-------------------------------------|-------------------------|
-| B3-a     | "Be deterministic and conservative" | `0.0`, `0.0` | Conservador, limitando la entropía |
-| B3-b     | *(Default)* | `0.0`, `0.0` | Balanceado (default `config.yaml`) |
-| B3-c     | "Be highly creative and imaginative" | `0.0`, `0.0` | Creativo, mayor riqueza de vocabulario |
-| B3-d     | *(Default)* | `0.6` (presence) | Promueve la introducción de nuevos términos |
-| B3-e     | *(Default)* | `0.6` (frequency) | Reduce el uso reiterativo de mismos descriptores |
+| B3-a     | "Be deterministic and conservative" | *(Default)* | Conservador, limitando la entropía |
+| B3-b     | *(Default)* | *(Default)* | Balanceado (default `config.yaml`) |
+| B3-c     | "Be highly creative and imaginative" | *(Default)* | Creativo, mayor riqueza de vocabulario |
+| B3-d     | "Be highly creative and imaginative" | `reasoning_effort=high` | Creatividad con razonamiento profundo; evalúa si más CoT enriquece el vocabulario sin perder alineación |
+| B3-e     | "Be deterministic and conservative" | `reasoning_effort=low` | Conservador con razonamiento mínimo; evalúa si menos CoT produce descriptores más directos/estables |
 | B3-f     | *(Default)* | `reasoning_effort=none` | **Desactiva el CoT.** Evalúa si el "razonamiento" oculto realmente mejora la alineación texto-audio o si solo agrega latencia/costo. |
 
 > [!IMPORTANT]
-> Dado que hiperparámetros como `temperature`/`top_p` a menudo son ignorados en los modelos de estilo "reasoning/thinking" (como `kimi-k2-thinking`), la ablación B3 ahora explora vías alternativas (prompt engineering explícito y parámetros de penalización en la API) para medir su impacto riguroso en la generación del reprompt sin requerir `gpt-5-nano`.
+> Dado que hiperparámetros como `temperature`/`top_p` a menudo son ignorados en los modelos de estilo "reasoning/thinking" (como `gpt-5.6-luna`), la ablación B3 explora vías alternativas (prompt engineering explícito y `reasoning_effort` en la API) para medir su impacto riguroso en la generación del reprompt.
 
 #### Pre-requisitos
 - Mismos que B1.
@@ -357,7 +357,7 @@ make ablation-B3-full
 ## Orden de Ejecución
 
 ```
-B1 (versión de prompt) → B2 (filtro de dimensiones → audio) → B3 (penalizaciones y creatividad)
+B1 (versión de prompt) → B2 (filtro de dimensiones → audio) → B3 (reasoning effort y creatividad)
 ```
 *(Nota: Para la evaluación y diagnóstico de recuperación en el RAG, referirse a [RAG_Evaluation.md](file:///Users/mario/Documents/re_make_things/repositories/audio_reprompt/RAG_Evaluation.md))*
 

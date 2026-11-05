@@ -58,9 +58,8 @@ class AblationConfig:
     k: int = 10
     filter_dimensions: tuple[str, ...] | None = FILTER_DIMENSIONS_DEFAULT
     system_prompt_modifier: str | None = None
-    presence_penalty: float | None = None
-    frequency_penalty: float | None = None
     reduce_random_effort: bool = False
+    reasoning_effort: str | None = None
     requires_audio: bool = True
 
 
@@ -85,21 +84,21 @@ GENERATION_ABLATIONS: dict[str, AblationConfig] = {
         filter_dimensions=None,
         requires_audio=True,
     ),
-    # B3 — Nivel de Creatividad Inducida por Prompt y Penalizaciones
+    # B3 — Nivel de Creatividad Inducida por Prompt y Reasoning Effort
     "B3a": AblationConfig(
-        name="B3a — prompt determinista conservador", tag="B3a_prompt_determinista", system_prompt_modifier="Be deterministic and conservative", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
+        name="B3a — prompt determinista conservador", tag="B3a_prompt_determinista", system_prompt_modifier="Be deterministic and conservative", requires_audio=True,
     ),
     "B3b": AblationConfig(
-        name="B3b — prompt default pen=0.0", tag="B3b_default_pen0", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
+        name="B3b — prompt default", tag="B3b_default_pen0", requires_audio=True,
     ),
     "B3c": AblationConfig(
-        name="B3c — prompt creativo e imaginativo", tag="B3c_prompt_creativo", system_prompt_modifier="Be highly creative and imaginative", presence_penalty=0.0, frequency_penalty=0.0, requires_audio=True,
+        name="B3c — prompt creativo e imaginativo", tag="B3c_prompt_creativo", system_prompt_modifier="Be highly creative and imaginative", requires_audio=True,
     ),
     "B3d": AblationConfig(
-        name="B3d — presence penalty 0.6", tag="B3d_presence_06", presence_penalty=0.6, requires_audio=True,
+        name="B3d — prompt creativo + reasoning effort high", tag="B3d_creativo_effort_high", system_prompt_modifier="Be highly creative and imaginative", reasoning_effort="high", requires_audio=True,
     ),
     "B3e": AblationConfig(
-        name="B3e — frequency penalty 0.6", tag="B3e_frequency_06", frequency_penalty=0.6, requires_audio=True,
+        name="B3e — prompt determinista + reasoning effort low", tag="B3e_determinista_effort_low", system_prompt_modifier="Be deterministic and conservative", reasoning_effort="low", requires_audio=True,
     ),
     "B3f": AblationConfig(
             name="B3f — random effort none", tag="B3f_random_effort_none", reduce_random_effort=True, requires_audio=True,
@@ -149,9 +148,8 @@ def run_reprompt(cfg: AblationConfig, sample_size: int, seed: int, run_id: str =
             k=cfg.k,
             filter_dimensions=cfg.filter_dimensions,
             system_prompt_modifier=cfg.system_prompt_modifier,
-            presence_penalty=cfg.presence_penalty,
-            frequency_penalty=cfg.frequency_penalty,
             reduce_random_effort=cfg.reduce_random_effort,
+            reasoning_effort=cfg.reasoning_effort,
             tag=run_tag,
             output_dir=str(ABLATIONS_REPROMPTS_PATH),
         )
