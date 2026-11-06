@@ -7,8 +7,9 @@ def get_conn():
     db_password = os.environ["DB_PASSWORD"]
     db_host = os.environ["DB_HOST"]
     db_name = os.environ["DB_NAME"]
+    db_port = os.getenv("DB_PORT", "5432")
 
     return connect(
-        f"dbname={db_name} user={db_user} password={db_password} host={db_host}",
+        f"dbname={db_name} user={db_user} password={db_password} host={db_host} port={db_port}",
         autocommit=True,
     )

@@ -1,0 +1,11 @@
+[Unit]
+Description=Audio Reprompt Ablation Runner Idle Guard
+Documentation=https://github.com/audioreprompt-org/audio_reprompt
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/audio_reprompt/scripts/ablation_idle_guard.sh
+StandardOutput=journal+console
+StandardError=journal+console
