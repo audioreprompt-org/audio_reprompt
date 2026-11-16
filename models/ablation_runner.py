@@ -53,7 +53,7 @@ class AblationConfig:
     name: str
     tag: str
     models: list[str] = field(default_factory=lambda: [OPENAI_GPT_LUNA_MODEL])
-    prompt_version: str = "V4"
+    prompt_version: str = "V3"
     cut_results: bool = True
     k: int = 10
     filter_dimensions: tuple[str, ...] | None = FILTER_DIMENSIONS_DEFAULT
