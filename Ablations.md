@@ -23,16 +23,19 @@
 - [Estructura de Archivos](#estructura-de-archivos)
 - [Convención de Nombres](#convención-de-nombres)
 
-Cada experimento aísla una variable y se evalúa con **CLAP score** (coseno texto↔audio) usando `calculate_clap_score_alignment()` de `models/validate.py`.  
-Cada uno produce **tres** archivos con cálculos de score: reprompt↔audio, prompt-original↔audio y evaluación cruzada.
+Cada experimento aísla una variable y se evalúa con **CLAP score** (coseno texto↔audio, determinista con `seed=42`) usando `calculate_clap_score_alignment()` de `models/validate.py`.  
+Cada variante produce **tres** archivos de score obligatorios sobre el mismo conjunto de `id_prompt`:
+- `reprompt↔audio_reprompt` (`clap_score_results_reprompt_outputs_<tag>.csv`)
+- `prompt-original↔audio_prompt` (`_raw.csv`, baseline real desde `data/tracks/raw_ablations` con `source=raw_ablations` y caché en `clap_score_results_raw_prompts_baseline.csv`)
+- `prompt-original↔audio_reprompt` (`_cross.csv`, evaluación cruzada).
 
 > [!NOTE]
 > La evaluación de calidad de Recuperación de Información (IR) dentro del RAG fue actualizada y formalizada de manera independiente en [RAG_Evaluation.md](file:///Users/mario/Documents/re_make_things/repositories/audio_reprompt/RAG_Evaluation.md). Por tanto, las ablaciones descritas en este documento se concentran en la etapa de generación de reprompt y síntesis de audio (Componente B).
 
 ## Muestreo Estratificado
 
-Todos los experimentos usan **muestreo estratificado por `taste`** (4 categorías: sweet, sour, salty, bitter).  
-Un `seed` fijo garantiza que todas las variantes de un mismo experimento usen **el mismo subset de prompts**.
+Todos los experimentos usan **muestreo estratificado por `taste`** (4 categorías: sweet, sour, salty, bitter), ordenando las filas por `id_prompt` dentro de cada grupo antes de muestrear.  
+Un `seed` fijo garantiza que todas las variantes de un mismo experimento usen **exactamente el mismo subset de prompts** en cualquier máquina u orden de CSVs. Cada corrida registra su manifiesto en `data/ablations/analysis/<grupo>_<RUN_ID>/sample_manifest.json` (seed, tamaño, IDs ordenados y hash SHA-1).
 
 | Parámetro     | Default | Descripción |
 |---------------|---------|-------------|
@@ -65,14 +68,20 @@ El pipeline de ablaciones utiliza un modelo híbrido optimizado para costo y est
 4. Sincronización y Validación (run_ablation_job.sh)
        │  Hard-sync con origin/ablations-experiments + uv sync --frozen
        │  Preflight de DB, Kaggle y permisos de git push
+       │  (No descarga data/tracks completo; solo pull de data/ablations, data/raw y data/prompts)
        ▼
 5. Pipeline de Ablación (models.ablation_runner --phase full)
+       │  Preflight: sample_manifest.json + ensure_raw_baseline()
+       │    (caché baseline → WAV local → dvc pull granular por ID → fail-fast EXIT=6 o staging)
        │  Fase 1: Generación de reprompts (Postgres RDS)
-       │  Fase 2: Kaggle GPU (dataset y kernel aislados por run_id)
+       │  Fase 2: Kaggle GPU (dataset y kernel aislados por run_id) + .ablation_state/<RUN_ID>.json
        │  Fase 3: Cálculo de CLAP scores (CPU)
-       │  Fase 4: Análisis estadístico y reportes
+       │  Fase 4: Evaluación NLP de reprompts (no fatal; registra nlp_status.json)
+       │  Fase 5: Análisis estadístico y reportes
        ▼
 6. Publicación Concurrente (ablation_publish.sh)
+       │  Si raw_audio_generated > 0 en .ablation_state/<RUN_ID>.json:
+       │    ablation_publish.sh --target data/tracks --scope data/tracks/raw_ablations
        │  dvc add data/ablations + dvc push
        │  git commit pointer (.dvc) + retry con backoff
        ▼
@@ -332,6 +341,7 @@ make ablation-B2-full
 | B3-d     | "Be highly creative and imaginative" | `reasoning_effort=high` | Creatividad con razonamiento profundo; evalúa si más CoT enriquece el vocabulario sin perder alineación |
 | B3-e     | "Be deterministic and conservative" | `reasoning_effort=low` | Conservador con razonamiento mínimo; evalúa si menos CoT produce descriptores más directos/estables |
 | B3-f     | *(Default)* | `reasoning_effort=none` | **Desactiva el CoT.** Evalúa si el "razonamiento" oculto realmente mejora la alineación texto-audio o si solo agrega latencia/costo. |
+| B3-g     | *(Default)* | *(Default)* | **Control A/A**: réplica idéntica de B3-b. B3-b − B3-g estima el ruido de generación dentro de un run. Solo se ejecuta si se pide en `--variants` (p. ej. `core+aa`). |
 
 > [!IMPORTANT]
 > Dado que hiperparámetros como `temperature`/`top_p` a menudo son ignorados en los modelos de estilo "reasoning/thinking" (como `gpt-5.6-luna`), la ablación B3 explora vías alternativas (prompt engineering explícito y `reasoning_effort` en la API) para medir su impacto riguroso en la generación del reprompt.
@@ -363,20 +373,31 @@ B1 (versión de prompt) → B2 (filtro de dimensiones → audio) → B3 (reasoni
 
 ## Inputs del Análisis Estadístico
 
-El análisis (`ablation_analysis.py`) consume datos de **dos fuentes**, filtrados por `run_id`:
+El análisis (`ablation_analysis.py`) es de **solo lectura** (no recalcula NLP sobre la marcha) y consume datos filtrados por `run_id`:
 
 | Input | Ubicación | Datos que aporta |
 |-------|-----------|------------------|
-| Evaluación CSVs | `data/ablations/scores/` | CLAP scores (reprompt↔audio, original↔audio, evaluación cruzada) |
+| Evaluación CSVs | `data/ablations/scores/` | CLAP scores obligatorios: `reprompt↔audio_rep`, `_raw.csv` (`source=raw_ablations`), y `_cross.csv` (`prompt-original↔audio_rep`) |
 | Reprompt CSVs | `data/ablations/reprompts/` | Columna `taste` para desglose por categoría (sabor) |
+| Métricas NLP | `data/ablations/analysis/nlp_<run_id>/` | `nlp_eval_*.csv`, `nlp_rows_*.csv`, y `nlp_status.json` (si falla una variante, el reporte muestra `> [!WARNING]`) |
 
 El análisis genera:
-- Estadísticas descriptivas y t-test pareado (raw vs reprompt)
-- Cohen's d (tamaño del efecto)
-- Desglose por categoría de taste
-- Correlación Kendall τ
+- Matriz conjunta CLAP (3 columnas) + Diversidad NLP (§0) y registro de variantes excluidas si falta el baseline
+- Comparación entre variantes con corrección de Holm (§1A `reprompt`, §1B `cross`, §1C métricas NLP)
+- Comparaciones pareadas intra-variante (§2A `reprompt vs baseline`, §2B `cross vs baseline`) en `summary_<grupo>.csv` (incluyendo `sample_hash`)
+- Desglose por categoría de taste y correlación Kendall τ
 - Plots de distribución y comparación
 - Reporte `hallazgos_<grupo>.md` en español
+
+## Generación de Audio Baseline (`GENERATE_RAW_AUDIO` / `RAW_AUDIO_SCOPE`)
+
+Antes de ejecutar la Fase 1, el preflight (`ensure_raw_baseline`) verifica si todos los IDs requeridos ya tienen score válido en `clap_score_results_raw_prompts_baseline.csv` o `.wav` local (intentando primero un `dvc pull` granular únicamente para los IDs faltantes):
+
+- **Sin `GENERATE_RAW_AUDIO=1`** *(comportamiento por defecto)*: si algún ID del muestreo no tiene score cacheado ni WAV en DVC/local, el pipeline falla de inmediato (`EXIT_BASELINE_MISSING=6`) antes de consumir cuota LLM o Kaggle.
+- **Con `GENERATE_RAW_AUDIO=1` (`--generate-raw-audio`)**: agrega los prompts baseline faltantes al batch de Kaggle GPU y luego publica `data/tracks` con `--scope data/tracks/raw_ablations` únicamente si `raw_audio_generated > 0` en `.ablation_state/<RUN_ID>.json`.
+- **`RAW_AUDIO_SCOPE=sample|all` (`--raw-audio-scope`)**:
+  - `sample` *(default)*: genera únicamente los IDs muestreados que falten.
+  - `all`: verifica todos los prompts en `data/raw/user/*.csv` (ej. los 260 actuales o nuevos prompts agregados) y genera solo los faltantes.
 
 ## Comandos Make
 
@@ -392,6 +413,8 @@ make ablation-destroy                        # Destruye la infraestructura despl
 # ── Ejecución remota en EC2 vía AWS SSM (recomendada) ──
 make ablation-ec2-run EXPERIMENT=B2                        # Enciende EC2 + dispara B2 vía SSM (SAMPLE_SIZE=30, SEED=42)
 make ablation-ec2-run EXPERIMENT=B1 SEED=42 SAMPLE_SIZE=30 # Personaliza experimento, semilla y muestra
+make ablation-ec2-run EXPERIMENT=B3 VARIANTS=core+aa SEED=43 SAMPLE_SIZE=120 # Subconjunto: IDs (B3a,B3b,B3c,B3f) o preset (core, core+aa)
+make ablation-ec2-run EXPERIMENT=B3 VARIANTS=core+aa SEED=43 SAMPLE_SIZE=120 GENERATE_RAW_AUDIO=1 RAW_AUDIO_SCOPE=sample # Genera baseline faltante de la muestra (o RAW_AUDIO_SCOPE=all)
 make ablation-remote EXPERIMENT=B3 SEED=123 SAMPLE_SIZE=50 # Alias de ablation-ec2-run
 make ablation-ec2-logs                                     # Descarga la salida de consola de EC2 a logs_ablations_latest.txt
 make ablation-ec2-logs LOG_FILE=logs_b2.txt                # Descarga la salida a un archivo personalizado
@@ -446,16 +469,24 @@ data/ablations/
 │   └── pipeline_results_*_B2b_nofilter_R20260416_194531/
 │       └── ...
 ├── scores/          # CLAP scores (Fase 3)
+│   ├── clap_score_results_raw_prompts_baseline.csv
 │   ├── clap_score_results_reprompt_outputs_*_R20260416_194531.csv
 │   ├── clap_score_results_prompt_outputs_*_R20260416_194531_raw.csv
 │   └── clap_score_results_prompt_outputs_*_R20260416_194531_cross.csv
 ├── analysis/        # Reportes estadísticos y NLP
 │   ├── nlp_R20260416_194531/
+│   │   ├── nlp_status.json
 │   │   ├── nlp_eval_kimi_k2_thinking_..._R20260416_194531.md
-│   │   └── nlp_eval_kimi_k2_thinking_..._R20260416_194531.csv
+│   │   ├── nlp_eval_kimi_k2_thinking_..._R20260416_194531.csv
+│   │   └── nlp_rows_kimi_k2_thinking_..._R20260416_194531.csv
 │   └── B2_R20260416_194531/
+│       ├── sample_manifest.json
 │       ├── hallazgos_B2.md
+│       ├── pairwise_reprompt_B2.csv
+│       ├── pairwise_cross_B2.csv
+│       ├── pairwise_nlp_B2.csv
 │       ├── summary_B2.csv
+│       ├── summary_nlp_B2.csv
 │       ├── comparison_B2.png
 │       └── *.png
 ├── archive/         # Resultados anteriores archivados

@@ -45,6 +45,8 @@ STAGING_DIR = PROJECT_ROOT / ".kaggle_staging"
 NB_FILENAME = "ablation-audio-gen.ipynb"
 
 ABLATIONS_AUDIO_PATH = PROJECT_ROOT / "data" / "ablations" / "audio"
+RAW_ABLATIONS_AUDIO_PATH = PROJECT_ROOT / "data" / "tracks" / "raw_ablations"
+RAW_ABLATIONS_STEM = "raw_ablations"
 
 DEFAULT_TIMEOUT = int(os.getenv("KAGGLE_TIMEOUT", "32400"))
 ISOLATE_RUNS = os.getenv("KAGGLE_ISOLATE_RUNS", "").strip().lower() in ("1", "true", "yes")
@@ -403,7 +405,7 @@ def _generate_notebook(target: KaggleTarget = DEFAULT_TARGET) -> Path:
             "\n"
             "    for row in tqdm(rows, desc=csv_file.stem):\n"
             '        id_prompt = row["id_prompt"]\n'
-            '        reprompt = row["reprompt"]\n'
+            '        reprompt = row.get("reprompt") or row.get("prompt") or row.get("sentence") or ""\n'
             '        output_path = sub_dir / f"{id_prompt}.wav"\n'
             "\n"
             "        if output_path.exists():\n"
@@ -585,10 +587,13 @@ def _download_output(
 
     for zf in zip_files:
         dir_name = zf.stem
-        # Append run_id if provided and not already present
-        if run_id and not _RUN_ID_RE.search(dir_name):
-            dir_name = f"{dir_name}_{run_id}"
-        extract_dir = dest / dir_name
+        if dir_name == RAW_ABLATIONS_STEM:
+            extract_dir = RAW_ABLATIONS_AUDIO_PATH
+        else:
+            # Append run_id if provided and not already present
+            if run_id and not _RUN_ID_RE.search(dir_name):
+                dir_name = f"{dir_name}_{run_id}"
+            extract_dir = dest / dir_name
         extract_dir.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(zf, "r") as z:
             z.extractall(extract_dir)

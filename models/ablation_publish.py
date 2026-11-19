@@ -76,45 +76,56 @@ def _scan_target_dir_files(target_dir: Path, repo_root: Path) -> list[Path]:
     return sorted(collected)
 
 
-def get_changed_dvc_files(target_dir: Path, repo_root: Path, dvc_cmd: str = "dvc") -> list[Path]:
-    """Identify new or modified files under target_dir using dvc data status,
-    with a fallback to scanning target_dir directly if dvc data status fails
-    or returns no changes while files exist on disk.
+def get_changed_dvc_files(
+    target_dir: Path,
+    repo_root: Path,
+    dvc_cmd: str = "dvc",
+    scope: Path | None = None,
+) -> list[Path]:
+    """Identify new or modified files under target_dir (or scope) using dvc data status,
+    with a fallback to scanning scan_dir directly ONLY when dvc data status fails.
     """
+    scan_dir = scope if scope is not None else target_dir
     cmd = [dvc_cmd, "data", "status", "--granular", "--json"]
     changed: list[Path] = []
     seen: set[str] = set()
+    status_ok = False
 
     try:
         proc = run_cmd(cmd, cwd=repo_root, check=True, capture_output=True)
         status = json.loads(proc.stdout.strip() or "{}")
-        target_prefix = target_dir.as_posix().rstrip("/") + "/"
+        status_ok = True
+        scan_prefix = scan_dir.as_posix().rstrip("/") + "/"
 
         # uncommitted: workspace vs .dvc file; committed: .dvc file vs git HEAD
         for section in ("uncommitted", "committed"):
             sec_data = status.get(section, {})
             for kind in ("added", "modified"):
                 for p_str in sec_data.get(kind, []):
-                    # Ignore directories itself or outside target
-                    if p_str.endswith("/") or not p_str.startswith(target_prefix) or p_str in seen:
+                    # Ignore directories itself or outside scan_dir
+                    if p_str.endswith("/") or not p_str.startswith(scan_prefix) or p_str in seen:
                         continue
                     seen.add(p_str)
                     full_path = repo_root / p_str
                     if full_path.is_file():
                         changed.append(Path(p_str))
     except Exception as exc:
-        logger.warning(f"dvc data status failed ({exc}); falling back to direct scan of {target_dir}")
+        logger.warning(f"dvc data status failed ({exc}); falling back to direct scan of {scan_dir}")
         changed = []
+        status_ok = False
 
     if changed:
         return sorted(changed)
 
-    # Fallback: if dvc data status returned empty or failed, but files exist in target_dir,
-    # collect all files so fresh runs on uninitialized VMs never silently skip publishing.
-    fallback_files = _scan_target_dir_files(target_dir, repo_root)
+    # Guard: if dvc data status succeeded with zero changes, do not sweep the target directory.
+    if status_ok:
+        return []
+
+    # Fallback only when dvc data status itself failed.
+    fallback_files = _scan_target_dir_files(scan_dir, repo_root)
     if fallback_files:
         logger.info(
-            f"dvc data status reported 0 changed files; collected {len(fallback_files)} file(s) via fallback scan of {target_dir}"
+            f"dvc data status failed; collected {len(fallback_files)} file(s) via fallback scan of {scan_dir}"
         )
         return fallback_files
 
@@ -150,6 +161,7 @@ def publish(
     max_attempts: int = 6,
     dvc_cmd: str = "dvc",
     force: bool = False,
+    scope: str = "",
 ) -> int:
     """Publish results to DVC and git with optimistic concurrency and retry."""
     # Find repo root
@@ -163,6 +175,10 @@ def publish(
             raise RuntimeError("Detached HEAD state; please pass explicit --branch")
 
     target_path = Path(target).relative_to(repo_root) if Path(target).is_absolute() else Path(target)
+    scope_path: Path | None = None
+    if scope:
+        raw_scope = Path(scope)
+        scope_path = raw_scope.relative_to(repo_root) if raw_scope.is_absolute() else raw_scope
     dvc_file_rel = f"{target_path.as_posix()}.dvc"
     dvc_file = repo_root / dvc_file_rel
 
@@ -180,11 +196,12 @@ def publish(
             return 1
 
     # 1. Detect changed files
-    logger.info(f"Detecting new or modified files under {target_path} ...")
-    changed_files = get_changed_dvc_files(target_path, repo_root, dvc_cmd=dvc_cmd)
+    detect_label = scope_path if scope_path is not None else target_path
+    logger.info(f"Detecting new or modified files under {detect_label} ...")
+    changed_files = get_changed_dvc_files(target_path, repo_root, dvc_cmd=dvc_cmd, scope=scope_path)
 
     if not changed_files:
-        logger.info(f"No changes detected under {target_path}/. Nothing to publish.")
+        logger.info(f"No changes detected under {detect_label}/. Nothing to publish.")
         return 0
 
     logger.info(f"Stashing {len(changed_files)} changed file(s)")
@@ -254,6 +271,7 @@ def main() -> None:
     parser.add_argument("--max-attempts", type=int, default=6, help="Maximum push retry attempts (default: 6)")
     parser.add_argument("--dvc", default=os.getenv("DVC", "dvc"), help="DVC binary command (default: dvc)")
     parser.add_argument("--force", action="store_true", help="Discard local tracked modifications before syncing")
+    parser.add_argument("--scope", default="", help="Optional subfolder under --target to restrict change detection/fallback scan")
 
     args = parser.parse_args()
 
@@ -267,6 +285,7 @@ def main() -> None:
             max_attempts=args.max_attempts,
             dvc_cmd=args.dvc,
             force=args.force,
+            scope=args.scope,
         )
     )
 

@@ -18,6 +18,7 @@
 #   scripts/run_ablation_job.sh -e B1 --sample-size 50 --seed 42 --shutdown
 #   scripts/run_ablation_job.sh -e B2 --secret-name audio-db-secrets --shutdown
 #   scripts/run_ablation_job.sh -e B2 --no-wait --job-timeout 14400
+#   scripts/run_ablation_job.sh -e B3 --variants core+aa --seed 43 --sample-size 120
 #   scripts/run_ablation_job.sh -e B2 --no-sync --no-publish   # local dev
 #
 # Environment variables (on EC2 provided by /etc/ablation/env via systemd):
@@ -26,6 +27,8 @@
 #   ABLATION_LOCK_DIR=...    Lock directory for execution queueing (/tmp/ablation_job.lock.d)
 #   ABLATION_WAIT_LOCK=1     Wait in queue if lock held (1: wait, 0: fail fast)
 #   JOB_TIMEOUT_SEC=39600    Maximum active job execution timeout in seconds (11h default)
+#   GENERATE_RAW_AUDIO=0|1   Stage & generate missing raw baseline audios on Kaggle (default: 0)
+#   RAW_AUDIO_SCOPE=...      Scope for GENERATE_RAW_AUDIO: 'sample' (default) or 'all'
 #   DB_SECRET_NAME=...       AWS Secrets Manager secret name/ARN for RDS credentials
 #   KAGGLE_SECRET_NAME=...   AWS Secrets Manager secret name for Kaggle credentials
 #   LLM_SECRET_NAME=...      AWS Secrets Manager secret name for LLM API keys
@@ -41,6 +44,9 @@ ORIG_ARGS=("$@")
 EXPERIMENT="B2"
 SAMPLE_SIZE="${SAMPLE_SIZE:-}"
 SEED="${SEED:-}"
+VARIANTS="${VARIANTS:-}"
+GENERATE_RAW_AUDIO="${GENERATE_RAW_AUDIO:-0}"
+RAW_AUDIO_SCOPE="${RAW_AUDIO_SCOPE:-sample}"
 RUN_ID=""
 BRANCH="${ABLATION_BRANCH:-}"
 REMOTE="origin"
@@ -81,6 +87,10 @@ Options:
       --shutdown             Shut down / power off the VM upon completion
       --no-wait              Fail immediately instead of queueing if lock is held
       --job-timeout SEC      Active execution timeout in seconds (default: 39600 = 11h)
+      --variants LIST        Subset of the experiment group: comma-separated IDs or a preset
+                             (e.g. B3a,B3b,B3c,B3f or core+aa). Default: all
+      --generate-raw-audio   Generate missing baseline raw prompt audios in data/tracks/raw_ablations
+      --raw-audio-scope S    Generation scope with --generate-raw-audio: sample (default) or all
       --no-publish           Skip publishing DVC outputs and git commit
       --no-sync              Don't hard-sync the checkout to REMOTE/BRANCH (local dev)
   -h, --help                 Show this help message
@@ -92,6 +102,9 @@ while [[ $# -gt 0 ]]; do
     -e | --experiment) EXPERIMENT="$2"; shift 2 ;;
     -s | --sample-size) SAMPLE_SIZE="$2"; shift 2 ;;
     --seed) SEED="$2"; shift 2 ;;
+    --variants) VARIANTS="$2"; shift 2 ;;
+    --generate-raw-audio) GENERATE_RAW_AUDIO=1; shift ;;
+    --raw-audio-scope) RAW_AUDIO_SCOPE="$2"; shift 2 ;;
     --run-id) RUN_ID="$2"; shift 2 ;;
     -b | --branch) BRANCH="$2"; shift 2 ;;
     --remote) REMOTE="$2"; shift 2 ;;
@@ -116,6 +129,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$JOB_TIMEOUT_SEC" =~ ^[0-9]+$ && "$JOB_TIMEOUT_SEC" -gt 0 ]] || die "JOB_TIMEOUT_SEC must be a positive integer (got: $JOB_TIMEOUT_SEC)"
+[[ "$RAW_AUDIO_SCOPE" == "sample" || "$RAW_AUDIO_SCOPE" == "all" ]] || die "RAW_AUDIO_SCOPE must be 'sample' or 'all' (got: $RAW_AUDIO_SCOPE)"
 
 flock_fd_nonblock() {
   local fd="$1"
@@ -207,7 +221,7 @@ cleanup_and_shutdown() {
     # While still holding fd 200, clean up any partial failed-run artifacts
     # so the next queued job's publish never sweeps them up.
     find data/ablations -mindepth 2 -maxdepth 2 -name "*${RUN_ID}*" -exec rm -rf {} + 2>/dev/null || true
-    rm -rf ".kaggle_staging/${RUN_ID}" 2>/dev/null || true
+    rm -rf ".kaggle_staging/${RUN_ID}" ".ablation_state/${RUN_ID}.json" 2>/dev/null || true
   fi
 
   # Release the execution lock immediately
@@ -286,6 +300,8 @@ log "Starting Ablation Job"
 log "  Experiment:  $EXPERIMENT"
 log "  Sample Size: $SAMPLE_SIZE"
 log "  Seed:        $SEED"
+log "  Variants:    ${VARIANTS:-all}"
+log "  Raw Audio:   ${GENERATE_RAW_AUDIO} (scope=${RAW_AUDIO_SCOPE})"
 log "  Run ID:      $RUN_ID"
 log "  Branch:      $BRANCH @ $(git rev-parse --short HEAD)"
 log "  Job Timeout: ${JOB_TIMEOUT_SEC}s"
@@ -357,6 +373,8 @@ fi
 
 # ── 4. DVC inputs ────────────────────────────────────────────────────────────
 # dvc lives in the uv venv → always invoke it through `uv run`.
+# Note: data/tracks.dvc is NOT pulled wholesale here; missing baseline WAVs
+# are fetched granularly per-ID by models.ablation_runner.ensure_raw_baseline().
 if [[ -f data/raw.dvc ]] && ! ls data/raw/user/*.csv >/dev/null 2>&1; then
   log "Pulling raw user prompts via DVC (data/raw.dvc)..."
   uv run --quiet dvc pull data/raw.dvc || die "dvc pull data/raw.dvc failed"
@@ -389,11 +407,18 @@ fi
 
 # Invoke the runner directly (credentials are already in the environment);
 # avoids depending on `uv run --env-file .env`, which doesn't exist on EC2.
+RAW_AUDIO_FLAG=()
+if [[ "${GENERATE_RAW_AUDIO:-0}" == "1" || "${GENERATE_RAW_AUDIO:-}" == "true" ]]; then
+  RAW_AUDIO_FLAG=(--generate-raw-audio --raw-audio-scope "$RAW_AUDIO_SCOPE")
+fi
+
 log "Running experiment $EXPERIMENT (Phase: full)..."
 run_with_timeout "$REMAINING_SEC" uv run python -m models.ablation_runner \
   --experiment "$EXPERIMENT" \
   --sample-size "$SAMPLE_SIZE" \
   --seed "$SEED" \
+  ${VARIANTS:+--variants "$VARIANTS"} \
+  ${RAW_AUDIO_FLAG[@]+"${RAW_AUDIO_FLAG[@]}"} \
   --phase full \
   --run-id "$RUN_ID"
 
@@ -401,13 +426,31 @@ log "✓ Pipeline execution completed successfully for $EXPERIMENT ($RUN_ID)."
 
 # ── 6. Publication ───────────────────────────────────────────────────────────
 if [[ "$DO_PUBLISH" -eq 1 ]]; then
+  RAW_AUDIO_GENERATED=0
+  STATE_FILE=".ablation_state/${RUN_ID}.json"
+  if [[ -f "$STATE_FILE" ]]; then
+    RAW_AUDIO_GENERATED="$(python3 -c 'import json, sys; print(int(json.load(open(sys.argv[1])).get("raw_audio_generated", 0)))' "$STATE_FILE" 2>/dev/null || echo 0)"
+  fi
+
+  if [[ "$RAW_AUDIO_GENERATED" -gt 0 && -d data/tracks/raw_ablations ]]; then
+    log "Publishing ${RAW_AUDIO_GENERATED} new baseline raw audio(s) (updating data/tracks.dvc)..."
+    run_with_timeout "${PUBLISH_TIMEOUT_SEC:-1800}" ./scripts/ablation_publish.sh \
+      --run-id "$RUN_ID" \
+      --branch "$BRANCH" \
+      --remote "$REMOTE" \
+      --target data/tracks \
+      --scope data/tracks/raw_ablations \
+      -m "tracks: add raw_ablations baseline audios ($RUN_ID)"
+  else
+    log "Skipping data/tracks publish (raw_audio_generated=${RAW_AUDIO_GENERATED})."
+  fi
   log "Publishing results (updating data/ablations.dvc and git commit)..."
   run_with_timeout "${PUBLISH_TIMEOUT_SEC:-1800}" ./scripts/ablation_publish.sh \
     --run-id "$RUN_ID" \
     --branch "$BRANCH" \
     --remote "$REMOTE" \
     --target data/ablations \
-    -m "ablations: automated run $EXPERIMENT ($RUN_ID) [size=$SAMPLE_SIZE, seed=$SEED]"
+    -m "ablations: automated run $EXPERIMENT ($RUN_ID) [size=$SAMPLE_SIZE, seed=$SEED, variants=${VARIANTS:-all}]"
   log "✓ Results successfully published."
 fi
 

@@ -1,11 +1,9 @@
 from typing import Optional, Iterable
 import torch
 
-from laion_clap import CLAP_Module
-
 from models.clap_score.typedefs import CLAPScored, CLAPItem, TARGET_SR
 
-from models.clap_score.utils import load_audio_tensor, resolve_device
+from models.clap_score.utils import load_audio_tensor, resolve_device, set_reproducibility
 
 SPECIALIZED_WEIGHTS_URL = "https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt"
 
@@ -27,6 +25,8 @@ class ClapModel:
                      - Otherwise, it's treated as a local file path.
         """
         self.device = resolve_device(device)
+
+        from laion_clap import CLAP_Module
 
         # Allow toggling fusion and swapping weights
         self.model = CLAP_Module(enable_fusion=enable_fusion)
@@ -75,13 +75,15 @@ class ClapModel:
 
     @torch.no_grad()
     def calculate_scores(self, items: Iterable[CLAPItem]) -> list[CLAPScored]:
+        set_reproducibility(42)
+        items_list = list(items)
         out: list[CLAPScored] = []
 
-        text_embeddings = self.embed_text([element.prompt for element in items])
-        audio_embeddings = self.embed_audio([element.audio_path for element in items])
+        text_embeddings = self.embed_text([element.prompt for element in items_list])
+        audio_embeddings = self.embed_audio([element.audio_path for element in items_list])
 
         scores = self.calculate_score_with_embeddings(text_embeddings, audio_embeddings)
-        for idx, item in enumerate(items):
+        for idx, item in enumerate(items_list):
             out.append(CLAPScored(item=item, clap_score=scores[idx]))
 
         return out

@@ -225,5 +225,8 @@ results/*
 # Kaggle staging directory
 .kaggle_staging/
 
+# Ablation per-run state (publish gating)
+.ablation_state/
+
 # Ablation Logs
 logs_*.txt

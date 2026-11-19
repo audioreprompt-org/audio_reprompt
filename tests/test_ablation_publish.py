@@ -100,8 +100,9 @@ class TestAblationPublish(unittest.TestCase):
             ],
         )
 
-    def test_get_changed_dvc_files_fallback_when_dvc_status_empty(self) -> None:
-        # Create files on disk
+    def test_get_changed_dvc_files_guard_when_dvc_status_empty(self) -> None:
+        # Create files on disk; because dvc data status succeeds with zero changes,
+        # the guard must prevent sweeping the whole target directory.
         f1 = self.target_full / "B2_run" / "report.md"
         f1.parent.mkdir(parents=True, exist_ok=True)
         f1.write_text("# Report")
@@ -113,7 +114,41 @@ class TestAblationPublish(unittest.TestCase):
         with patch("models.ablation_publish.run_cmd", return_value=mock_proc):
             files = get_changed_dvc_files(self.target_dir, self.repo_root)
 
-        self.assertEqual(files, [Path("data/ablations/B2_run/report.md")])
+        self.assertEqual(files, [])
+
+    def test_get_changed_dvc_files_respects_scope(self) -> None:
+        tracks_dir = Path("data/tracks")
+        scope_dir = Path("data/tracks/raw_ablations")
+        raw_wav = self.repo_root / scope_dir / "1.wav"
+        other_wav = self.repo_root / tracks_dir / "generated_music" / "2.wav"
+        raw_wav.parent.mkdir(parents=True, exist_ok=True)
+        other_wav.parent.mkdir(parents=True, exist_ok=True)
+        raw_wav.write_bytes(b"RIFF")
+        other_wav.write_bytes(b"RIFF")
+
+        dvc_status_output = json.dumps({
+            "uncommitted": {
+                "added": [
+                    "data/tracks/raw_ablations/1.wav",
+                    "data/tracks/generated_music/2.wav",
+                ]
+            }
+        })
+        mock_proc = MagicMock(spec=subprocess.CompletedProcess)
+        mock_proc.returncode = 0
+        mock_proc.stdout = dvc_status_output
+
+        with patch("models.ablation_publish.run_cmd", return_value=mock_proc):
+            scoped_files = get_changed_dvc_files(tracks_dir, self.repo_root, scope=scope_dir)
+        self.assertEqual(scoped_files, [Path("data/tracks/raw_ablations/1.wav")])
+
+        # Also check fallback scan when dvc data status fails
+        with patch(
+            "models.ablation_publish.run_cmd",
+            side_effect=subprocess.CalledProcessError(1, ["dvc", "data", "status"]),
+        ):
+            fallback_scoped = get_changed_dvc_files(tracks_dir, self.repo_root, scope=scope_dir)
+        self.assertEqual(fallback_scoped, [Path("data/tracks/raw_ablations/1.wav")])
 
     def test_get_changed_dvc_files_fallback_when_dvc_command_fails(self) -> None:
         # Create files on disk

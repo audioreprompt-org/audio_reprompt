@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import argparse
 import glob
+import itertools
+import json
 import re
 import sys
 from pathlib import Path
@@ -31,8 +33,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
+from statsmodels.stats.multitest import multipletests
 
 from config import PROJECT_ROOT, setup_project_paths
+from models.validate import compute_sample_hash
 
 setup_project_paths()
 
@@ -68,45 +72,73 @@ def _find_matching_reprompt_csv(tag: str) -> Path | None:
 
 
 def _discover_experiment_groups(run_id: str = "") -> dict[str, list[str]]:
-    """Discover score files and group them by experiment prefix (B2, B3, etc.).
+    """Discover score files and group them by experiment prefix (B1, B2, B3, etc.).
 
     If run_id is provided, only include tags containing that run ID.
     """
-    reprompt_scores = sorted(ABLATIONS_SCORES.glob("clap_score_results_reprompt_outputs_*.csv"))
-    groups: dict[str, list[str]] = {}
-    for f in reprompt_scores:
+    score_files: list[Path] = []
+    for pattern in (
+        "clap_score_results_reprompt_outputs_*.csv",
+        "clap_score_results_prompt_outputs_*_raw.csv",
+        "clap_score_results_prompt_outputs_*_cross.csv",
+    ):
+        score_files.extend(ABLATIONS_SCORES.glob(pattern))
+
+    groups: dict[str, set[str]] = {}
+    for f in sorted(score_files):
+        if f.name == "clap_score_results_raw_prompts_baseline.csv":
+            continue
         tag = _extract_tag(f.name)
-        # filter by run_id if provided
         if run_id and run_id not in tag:
             continue
-        # extract experiment prefix: B2a_filter_default_R... → B2
         match = re.match(r".*?(B\d)", tag)
         if match:
             prefix = match.group(1)
-            groups.setdefault(prefix, []).append(tag)
-    return groups
+            groups.setdefault(prefix, set()).add(tag)
+    return {prefix: sorted(tags) for prefix, tags in groups.items()}
 
 
 # ── Analysis functions ───────────────────────────────────────
 
 
+def _is_true_raw_baseline_df(df: pd.DataFrame | None) -> bool:
+    """Return True if a _raw.csv DataFrame explicitly comes from raw_ablations."""
+    if df is None or df.empty or "source" not in df.columns:
+        return False
+    return bool((df["source"] == "raw_ablations").all())
+
+
 def load_experiment_data(
     tag: str,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None]:
-    """Load reprompt scores, raw scores, and cross scores for a given tag.
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load reprompt, true raw baseline, and cross score CSVs for a given tag.
 
-    Returns (df_reprompt, df_raw, df_cross | None).
+    Requires all three CSVs to exist and requires `_raw.csv` to carry
+    ``source == "raw_ablations"`` without NaN baseline scores.
     """
     reprompt_path = ABLATIONS_SCORES / f"clap_score_results_reprompt_outputs_{tag}.csv"
     raw_path = ABLATIONS_SCORES / f"clap_score_results_prompt_outputs_{tag}_raw.csv"
     cross_path = ABLATIONS_SCORES / f"clap_score_results_prompt_outputs_{tag}_cross.csv"
 
-    if not reprompt_path.exists():
-        raise FileNotFoundError(f"Reprompt scores not found: {reprompt_path}")
+    missing = [p for p in (reprompt_path, raw_path, cross_path) if not p.exists()]
+    if missing:
+        missing_names = ", ".join(p.name for p in missing)
+        raise FileNotFoundError(
+            f"Faltan archivos de score requeridos para '{tag}': {missing_names}"
+        )
 
     df_reprompt = pd.read_csv(reprompt_path)
-    df_raw = pd.read_csv(raw_path) if raw_path.exists() else None
-    df_cross = pd.read_csv(cross_path) if cross_path.exists() else None
+    df_raw = pd.read_csv(raw_path)
+    df_cross = pd.read_csv(cross_path)
+
+    if df_reprompt.empty or df_cross.empty:
+        raise ValueError(f"CSVs de score vacíos para '{tag}'")
+    if not _is_true_raw_baseline_df(df_raw):
+        raise ValueError(
+            f"_raw.csv para '{tag}' no tiene source=='raw_ablations' (no hay fallback)"
+        )
+    if df_raw["clap_score"].isna().any():
+        raise ValueError(f"_raw.csv para '{tag}' contiene NaN en clap_score")
 
     return df_reprompt, df_raw, df_cross
 
@@ -115,20 +147,38 @@ def build_comparison_df(
     df_reprompt: pd.DataFrame,
     df_raw: pd.DataFrame | None,
     taste_map: dict[str, str] | None = None,
+    df_cross: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Build a comparison DataFrame merging reprompt and raw scores."""
+    """Build a comparison DataFrame merging reprompt, raw baseline, and cross scores."""
+    rep = df_reprompt.copy()
+    rep["id_prompt"] = rep["id_prompt"].astype(str)
+
     if df_raw is not None:
-        comp = df_raw[["id_prompt", "text", "clap_score"]].merge(
-            df_reprompt[["id_prompt", "clap_score"]],
+        raw = df_raw.copy()
+        raw["id_prompt"] = raw["id_prompt"].astype(str)
+        comp = raw[["id_prompt", "text", "clap_score"]].merge(
+            rep[["id_prompt", "clap_score"]],
             on="id_prompt",
             suffixes=("_raw", "_reprompt"),
         )
         comp["diferencia"] = comp["clap_score_reprompt"] - comp["clap_score_raw"]
+        comp["has_true_raw_audio"] = _is_true_raw_baseline_df(df_raw)
     else:
-        comp = df_reprompt[["id_prompt", "text", "clap_score"]].copy()
+        comp = rep[["id_prompt", "text", "clap_score"]].copy()
         comp.rename(columns={"clap_score": "clap_score_reprompt"}, inplace=True)
         comp["clap_score_raw"] = np.nan
         comp["diferencia"] = np.nan
+        comp["has_true_raw_audio"] = False
+
+    if df_cross is not None:
+        cross = df_cross.copy()
+        cross["id_prompt"] = cross["id_prompt"].astype(str)
+        cross_sub = cross[["id_prompt", "clap_score"]].rename(
+            columns={"clap_score": "clap_score_cross"}
+        )
+        comp = comp.merge(cross_sub, on="id_prompt", how="left")
+    else:
+        comp["clap_score_cross"] = np.nan
 
     if taste_map:
         comp["taste"] = comp["id_prompt"].astype(str).map(taste_map)
@@ -140,8 +190,10 @@ def descriptive_stats(comp: pd.DataFrame, label: str) -> pd.DataFrame:
     """Print and return descriptive statistics."""
     cols = {}
     if "clap_score_raw" in comp and comp["clap_score_raw"].notna().any():
-        cols["Raw Prompt"] = comp["clap_score_raw"]
+        cols["Raw Baseline"] = comp["clap_score_raw"]
     cols["Reprompt"] = comp["clap_score_reprompt"]
+    if "clap_score_cross" in comp and comp["clap_score_cross"].notna().any():
+        cols["Cross"] = comp["clap_score_cross"]
 
     summary = pd.DataFrame({k: v.describe() for k, v in cols.items()}).round(4)
     print(f"\n{'=' * 60}")
@@ -152,53 +204,122 @@ def descriptive_stats(comp: pd.DataFrame, label: str) -> pd.DataFrame:
 
 
 def paired_ttest(comp: pd.DataFrame, label: str) -> dict:
-    """Paired t-test between raw and reprompt scores."""
-    if comp["clap_score_raw"].isna().all():
-        print(f"\n  ⚠ No raw scores available for t-test ({label})")
+    """Paired statistical tests within a variant:
+    1. reprompt vs baseline raw (CLAP(reprompt, audio_rep) vs CLAP(prompt, audio_prompt))
+    2. cross vs baseline raw (CLAP(prompt, audio_rep) vs CLAP(prompt, audio_prompt))
+    """
+    valid_rep = comp.dropna(subset=["clap_score_raw", "clap_score_reprompt"])
+    if valid_rep.empty:
+        print(f"\n  ⚠ No raw scores available for paired tests ({label})")
         return {}
 
-    t_stat, p_value = stats.ttest_rel(
-        comp["clap_score_raw"].dropna(),
-        comp["clap_score_reprompt"].dropna(),
+    diff_rep = valid_rep["clap_score_reprompt"] - valid_rep["clap_score_raw"]
+    mean_raw = float(valid_rep["clap_score_raw"].mean())
+    mean_reprompt = float(valid_rep["clap_score_reprompt"].mean())
+    delta_rep = float(diff_rep.mean())
+
+    if len(valid_rep) >= 2:
+        t_stat, p_rep = stats.ttest_rel(
+            valid_rep["clap_score_reprompt"], valid_rep["clap_score_raw"]
+        )
+        t_stat = float(t_stat)
+        p_rep = float(p_rep)
+        try:
+            _, p_w_rep = stats.wilcoxon(diff_rep)
+            p_w_rep = float(p_w_rep)
+        except Exception:
+            p_w_rep = np.nan
+        sd_diff_rep = float(diff_rep.std(ddof=1))
+        dz_rep = delta_rep / sd_diff_rep if sd_diff_rep > 0 else 0.0
+        pooled_std = float(
+            np.sqrt(
+                (valid_rep["clap_score_raw"].std() ** 2 + valid_rep["clap_score_reprompt"].std() ** 2)
+                / 2
+            )
+        )
+        cohens_d = delta_rep / pooled_std if pooled_std > 0 else 0.0
+    else:
+        t_stat, p_rep, p_w_rep, dz_rep, cohens_d = np.nan, np.nan, np.nan, 0.0, 0.0
+
+    pct_improved = float((diff_rep > 0).mean() * 100)
+    pct_change = (delta_rep / mean_raw * 100) if mean_raw != 0 else 0.0
+
+    # Cross vs raw baseline (same text: original prompt)
+    valid_cross = (
+        comp.dropna(subset=["clap_score_raw", "clap_score_cross"])
+        if "clap_score_cross" in comp.columns
+        else pd.DataFrame()
     )
-
-    mean_raw = comp["clap_score_raw"].mean()
-    mean_reprompt = comp["clap_score_reprompt"].mean()
-    mean_diff = mean_reprompt - mean_raw
-
-    pooled_std = np.sqrt(
-        (comp["clap_score_raw"].std() ** 2 + comp["clap_score_reprompt"].std() ** 2)
-        / 2
-    )
-    cohens_d = mean_diff / pooled_std if pooled_std > 0 else 0
-
-    pct_improved = (comp["diferencia"] > 0).mean() * 100
+    if not valid_cross.empty:
+        diff_cross = valid_cross["clap_score_cross"] - valid_cross["clap_score_raw"]
+        mean_cross = float(valid_cross["clap_score_cross"].mean())
+        delta_cross = float(diff_cross.mean())
+        if len(valid_cross) >= 2:
+            t_stat_cross, p_t_cross = stats.ttest_rel(
+                valid_cross["clap_score_cross"], valid_cross["clap_score_raw"]
+            )
+            t_stat_cross = float(t_stat_cross)
+            p_t_cross = float(p_t_cross)
+            try:
+                _, p_w_cross = stats.wilcoxon(diff_cross)
+                p_w_cross = float(p_w_cross)
+            except Exception:
+                p_w_cross = np.nan
+            sd_diff_cross = float(diff_cross.std(ddof=1))
+            dz_cross = delta_cross / sd_diff_cross if sd_diff_cross > 0 else 0.0
+        else:
+            t_stat_cross, p_t_cross, p_w_cross, dz_cross = np.nan, np.nan, np.nan, 0.0
+        p_cross = p_w_cross if pd.notna(p_w_cross) else p_t_cross
+        pct_improved_cross = float((diff_cross > 0).mean() * 100)
+    else:
+        mean_cross = np.nan
+        delta_cross = np.nan
+        t_stat_cross = np.nan
+        p_t_cross = np.nan
+        p_w_cross = np.nan
+        p_cross = np.nan
+        dz_cross = np.nan
+        pct_improved_cross = np.nan
 
     results = {
         "label": label,
-        "n": len(comp),
+        "n": int(len(valid_rep)),
+        "mean_raw_baseline": mean_raw,
         "mean_raw": mean_raw,
         "mean_reprompt": mean_reprompt,
-        "mean_diff": mean_diff,
-        "pct_change": (mean_diff / mean_raw * 100) if mean_raw != 0 else 0,
+        "mean_cross": mean_cross,
+        "delta_rep_vs_raw": delta_rep,
+        "mean_diff": delta_rep,
+        "pct_change": pct_change,
         "t_stat": t_stat,
-        "p_value": p_value,
+        "p_rep_vs_raw": p_rep,
+        "p_value": p_rep,
+        "p_wilcoxon_rep_vs_raw": p_w_rep,
+        "dz_rep_vs_raw": dz_rep,
         "cohens_d": cohens_d,
         "pct_improved": pct_improved,
+        "delta_cross_vs_raw": delta_cross,
+        "t_stat_cross": t_stat_cross,
+        "p_cross_vs_raw": p_cross,
+        "p_t_cross_vs_raw": p_t_cross,
+        "p_wilcoxon_cross_vs_raw": p_w_cross,
+        "dz_cross_vs_raw": dz_cross,
+        "pct_improved_cross": pct_improved_cross,
     }
 
     print(f"\n{'=' * 60}")
-    print(f"  Paired t-test — {label}")
+    print(f"  Paired Tests — {label}")
     print(f"{'=' * 60}")
     print(f"  n = {results['n']}")
-    print(f"  Mean raw:      {mean_raw:.4f}")
-    print(f"  Mean reprompt: {mean_reprompt:.4f}")
-    print(f"  Diferencia:    {mean_diff:+.4f} ({results['pct_change']:+.1f}%)")
-    print(f"  t = {t_stat:.4f},  p = {p_value:.6f}")
-    print(f"  Cohen's d = {cohens_d:.4f}")
-    print(f"  Mejoraron: {pct_improved:.0f}%")
+    print(f"  Mean raw baseline: {mean_raw:.4f}")
+    print(f"  Mean reprompt:     {mean_reprompt:.4f}")
+    print(f"  Δ rep vs raw:      {delta_rep:+.4f} ({pct_change:+.1f}%), t={t_stat:.4f}, p={p_rep:.6f}, d_z={dz_rep:.4f}")
+    if pd.notna(mean_cross):
+        print(f"  Mean cross:        {mean_cross:.4f}")
+        print(f"  Δ cross vs raw:    {delta_cross:+.4f}, p_w={p_w_cross:.6f}, d_z={dz_cross:.4f}")
+    print(f"  Mejoraron (rep):   {pct_improved:.0f}%")
 
-    sig = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else "n.s."
+    sig = _significance_label(p_rep)
     print(f"  Significancia: {sig}")
 
     return results
@@ -216,35 +337,39 @@ def taste_breakdown(comp: pd.DataFrame, label: str) -> pd.DataFrame:
 
     rows = []
     for taste in sorted(comp["taste"].dropna().unique()):
-        subset = comp[comp["taste"] == taste].dropna(subset=["clap_score_raw"])
+        subset = comp[comp["taste"] == taste].dropna(
+            subset=["clap_score_raw", "clap_score_reprompt"]
+        )
         if len(subset) < 2:
             continue
         t_stat, p_val = stats.ttest_rel(
-            subset["clap_score_raw"], subset["clap_score_reprompt"]
+            subset["clap_score_reprompt"], subset["clap_score_raw"]
         )
+        diff = subset["clap_score_reprompt"] - subset["clap_score_raw"]
         rows.append(
             {
                 "Taste": taste,
                 "N": len(subset),
                 "Raw_μ": subset["clap_score_raw"].mean(),
                 "Reprompt_μ": subset["clap_score_reprompt"].mean(),
-                "Diferencia_μ": subset["diferencia"].mean(),
+                "Diferencia_μ": diff.mean(),
                 "Cambio_%": (
-                    subset["diferencia"].mean() / subset["clap_score_raw"].mean() * 100
+                    diff.mean() / subset["clap_score_raw"].mean() * 100
                     if subset["clap_score_raw"].mean() != 0
                     else 0
                 ),
                 "t_stat": t_stat,
                 "p_value": p_val,
-                "Mejoraron_%": (subset["diferencia"] > 0).mean() * 100,
+                "Mejoraron_%": (diff > 0).mean() * 100,
             }
         )
 
     taste_df = pd.DataFrame(rows).round(4)
-    print(f"\n{'=' * 60}")
-    print(f"  Per-Taste Breakdown — {label}")
-    print(f"{'=' * 60}")
-    print(taste_df.to_string(index=False))
+    if not taste_df.empty:
+        print(f"\n{'=' * 60}")
+        print(f"  Per-Taste Breakdown — {label}")
+        print(f"{'=' * 60}")
+        print(taste_df.to_string(index=False))
     return taste_df
 
 
@@ -255,7 +380,9 @@ def kendall_by_taste(comp: pd.DataFrame, label: str) -> pd.DataFrame:
 
     rows = []
     for taste in sorted(comp["taste"].dropna().unique()):
-        subset = comp[comp["taste"] == taste].dropna(subset=["clap_score_raw"])
+        subset = comp[comp["taste"] == taste].dropna(
+            subset=["clap_score_raw", "clap_score_reprompt"]
+        )
         if len(subset) < 3:
             continue
         tau, p_val = stats.kendalltau(
@@ -380,7 +507,9 @@ def plot_taste_boxes(comp: pd.DataFrame, label: str, output_dir: Path) -> None:
 
     for idx, taste in enumerate(tastes):
         ax = axes[idx // cols, idx % cols]
-        subset = comp[comp["taste"] == taste].dropna(subset=["clap_score_raw"])
+        subset = comp[comp["taste"] == taste].dropna(
+            subset=["clap_score_raw", "clap_score_reprompt"]
+        )
 
         data = [subset["clap_score_raw"], subset["clap_score_reprompt"]]
         bp = ax.boxplot(
@@ -397,14 +526,18 @@ def plot_taste_boxes(comp: pd.DataFrame, label: str, output_dir: Path) -> None:
         ax.axhline(y=0, color="gray", linestyle=":", linewidth=2, alpha=0.5)
         ax.set_ylabel("CLAP Score", fontsize=11, fontweight="bold")
 
-        _, p_val = stats.ttest_rel(
-            subset["clap_score_raw"], subset["clap_score_reprompt"]
-        )
-        sig = (
-            "***" if p_val < 0.01 else "**" if p_val < 0.05 else "*" if p_val < 0.10 else "ns"
-        )
+        if len(subset) >= 2:
+            _, p_val = stats.ttest_rel(
+                subset["clap_score_reprompt"], subset["clap_score_raw"]
+            )
+            sig = (
+                "***" if p_val < 0.01 else "**" if p_val < 0.05 else "*" if p_val < 0.10 else "ns"
+            )
+            p_txt = f"p={p_val:.3f} {sig}"
+        else:
+            p_txt = "p=—"
         ax.set_title(
-            f"{taste.upper()} (n={len(subset)}) | p={p_val:.3f} {sig}",
+            f"{taste.upper()} (n={len(subset)}) | {p_txt}",
             fontsize=12, fontweight="bold", pad=10,
         )
         ax.grid(True, alpha=0.3, axis="y")
@@ -487,7 +620,169 @@ def plot_comparison_across_variants(
 # ── Main analysis pipeline ───────────────────────────────────
 
 
-def analyse_single(tag: str, output_dir: Path) -> dict:
+def _holm_adjust(p_series: pd.Series) -> pd.Series:
+    """Apply Holm correction over non-NaN p-values while preserving NaNs."""
+    adjusted = pd.Series(np.nan, index=p_series.index, dtype=float)
+    valid_mask = p_series.notna()
+    if valid_mask.any():
+        adjusted.loc[valid_mask] = multipletests(
+            p_series.loc[valid_mask].astype(float), method="holm"
+        )[1]
+    return adjusted
+
+
+def compare_variants_on_column(
+    comp_by_tag: dict[str, pd.DataFrame],
+    group_prefix: str,
+    col: str = "clap_score_raw",
+) -> tuple[dict, pd.DataFrame]:
+    """Compare variants against each other on a paired per-prompt metric column."""
+    series = {
+        tag: df.set_index("id_prompt")[col]
+        for tag, df in comp_by_tag.items()
+        if col in df and df[col].notna().any()
+    }
+    if len(series) < 2:
+        return {}, pd.DataFrame()
+
+    wide = pd.DataFrame(series).dropna()
+    tags = list(wide.columns)
+    k = len(tags)
+
+    omnibus: dict = {"n": len(wide), "k": k}
+    if k > 2 and len(wide) >= 2:
+        try:
+            fr = stats.friedmanchisquare(*[wide[t] for t in tags])
+            omnibus["friedman_chi2"] = float(fr.statistic)
+            omnibus["friedman_p"] = float(fr.pvalue)
+            omnibus["kendall_w"] = float(fr.statistic / (len(wide) * (k - 1)))
+        except Exception:
+            pass
+
+    # Control variant for B3 (B3b) or all pairs for B1/B2
+    ctrl = next((t for t in tags if re.search(r"B3b_", t)), None) if group_prefix == "B3" else None
+    pairs = [(t, ctrl) for t in tags if t != ctrl] if ctrl else list(itertools.combinations(tags, 2))
+
+    rows = []
+    for a, b in pairs:
+        diff = wide[a] - wide[b]
+        t_stat, p_t = stats.ttest_rel(wide[a], wide[b])
+        try:
+            _, p_w = stats.wilcoxon(diff)
+        except Exception:
+            p_w = np.nan
+        sd = diff.std(ddof=1)
+        dz = diff.mean() / sd if sd > 0 else 0.0
+        rows.append(
+            {
+                "pair": f"{_short_tag(a).split()[0]} vs {_short_tag(b).split()[0]}",
+                "tag_a": a,
+                "tag_b": b,
+                "mean_a": wide[a].mean(),
+                "mean_b": wide[b].mean(),
+                "mean_diff": diff.mean(),
+                "t_stat": t_stat,
+                "p_t": p_t,
+                "p_wilcoxon": p_w,
+                "cohens_dz": dz,
+            }
+        )
+
+    pair_df = pd.DataFrame(rows)
+    if not pair_df.empty:
+        pair_df["p_t_holm"] = _holm_adjust(pair_df["p_t"])
+        pair_df["p_w_holm"] = _holm_adjust(pair_df["p_wilcoxon"])
+        pair_df = pair_df.round(4)
+
+    return omnibus, pair_df
+
+
+def compare_variants_on_cross(
+    comp_by_tag: dict[str, pd.DataFrame], group_prefix: str
+) -> tuple[dict, pd.DataFrame]:
+    """Compare variants against each other on CLAP(original_prompt, reprompt_audio)."""
+    return compare_variants_on_column(comp_by_tag, group_prefix, col="clap_score_cross")
+
+
+def _load_or_compute_nlp_for_tag(
+    tag: str, reprompt_csv: Path | None, output_dir: Path
+) -> tuple[dict | None, pd.DataFrame | None, str | None, dict[str, str]]:
+    """Read-only loader for corpus-level and row-level NLP diversity metrics.
+
+    Never invokes NLP computation on the fly. Returns
+    ``(summary_dict, rows_df, error_reason, backends_dict)``.
+    """
+    csv_tag = (
+        reprompt_csv.stem.replace("pipeline_results_", "")
+        if reprompt_csv is not None
+        else tag
+    )
+
+    candidate_dirs: list[Path] = [output_dir]
+    m = re.search(r"(R\d{8}_\d{6})", tag)
+    if m:
+        candidate_dirs.append(ABLATIONS_ANALYSIS / f"nlp_{m.group(1)}")
+    candidate_dirs.append(ABLATIONS_ANALYSIS / "nlp")
+
+    status_backends: dict[str, str] = {}
+    for d in candidate_dirs:
+        status_path = d / "nlp_status.json"
+        if not status_path.exists():
+            continue
+        try:
+            status_data = json.loads(status_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(status_data, dict):
+            continue
+        entry = status_data.get(csv_tag) or status_data.get(tag)
+        if isinstance(entry, dict):
+            status_backends = entry.get("backends") or {}
+            status_val = entry.get("status", "")
+            if status_val != "ok":
+                reason = entry.get("error") or status_val or "NLP falló"
+                return None, None, str(reason), status_backends
+
+    summary_csv: Path | None = None
+    rows_csv: Path | None = None
+    for d in candidate_dirs:
+        cand_summary = d / f"nlp_eval_{csv_tag}.csv"
+        cand_rows = d / f"nlp_rows_{csv_tag}.csv"
+        if cand_summary.exists():
+            summary_csv = cand_summary
+            rows_csv = cand_rows
+            break
+        if reprompt_csv is None and d.is_dir():
+            matches = sorted(d.glob(f"nlp_eval_*{tag}.csv"))
+            if matches:
+                summary_csv = matches[0]
+                inferred_tag = summary_csv.stem.replace("nlp_eval_", "")
+                rows_csv = d / f"nlp_rows_{inferred_tag}.csv"
+                break
+
+    if summary_csv is None or not summary_csv.exists():
+        return None, None, "resultados NLP no encontrados (ejecutar --phase nlp)", status_backends
+
+    summary_dict = pd.read_csv(summary_csv).iloc[0].to_dict()
+    rows_df = pd.read_csv(rows_csv) if rows_csv is not None and rows_csv.exists() else None
+
+    backends = dict(status_backends)
+    if not backends:
+        for key, col in (
+            ("encoder", "backend_encoder"),
+            ("tokenizer", "backend_tokenizer"),
+            ("flesch", "backend_flesch"),
+        ):
+            val = summary_dict.get(col)
+            if pd.notna(val) and str(val).strip():
+                backends[key] = str(val)
+
+    return summary_dict, rows_df, None, backends
+
+
+def analyse_single(
+    tag: str, output_dir: Path
+) -> tuple[dict, pd.DataFrame, dict | None, str | None, dict[str, str]]:
     """Run full analysis for a single experiment tag."""
     print(f"\n{'#' * 60}")
     print(f"  ANÁLISIS: {tag}")
@@ -503,13 +798,38 @@ def analyse_single(tag: str, output_dir: Path) -> dict:
         if "taste" in rp.columns:
             taste_map = dict(zip(rp["id_prompt"].astype(str), rp["taste"]))
 
-    comp = build_comparison_df(df_reprompt, df_raw, taste_map)
+    comp = build_comparison_df(df_reprompt, df_raw, taste_map, df_cross=df_cross)
+
+    # Read-only NLP diversity loading and merge row-level metrics by id_prompt
+    nlp_summary, nlp_rows, nlp_error, nlp_backends = _load_or_compute_nlp_for_tag(
+        tag, reprompt_csv, output_dir
+    )
+    if nlp_rows is not None and not nlp_rows.empty:
+        nlp_cols = [
+            c
+            for c in (
+                "ttr",
+                "mattr",
+                "bigram_entropy",
+                "flesch",
+                "musical_vocab_count",
+                "musical_vocab_density",
+                "semantic_sim_raw_rep",
+                "distinctiveness_cos_dist",
+            )
+            if c in nlp_rows.columns
+        ]
+        nlp_sub = nlp_rows[["id_prompt", *nlp_cols]].copy()
+        nlp_sub["id_prompt"] = nlp_sub["id_prompt"].astype(str)
+        comp = comp.merge(nlp_sub, on="id_prompt", how="left")
 
     # 1. Descriptive stats
     descriptive_stats(comp, tag)
 
-    # 2. Paired t-test (raw vs reprompt)
+    # 2. Paired tests (reprompt vs raw baseline, cross vs raw baseline)
     ttest_results = paired_ttest(comp, tag)
+    if ttest_results:
+        ttest_results["has_true_raw_audio"] = bool(comp["has_true_raw_audio"].any())
 
     # 3. Plots
     plot_distributions(comp, tag, output_dir)
@@ -527,7 +847,30 @@ def analyse_single(tag: str, output_dir: Path) -> dict:
     # 6. Taste box plots
     plot_taste_boxes(comp, tag, output_dir)
 
-    return ttest_results
+    return ttest_results, comp, nlp_summary, nlp_error, nlp_backends
+
+
+SUMMARY_COLUMNS = [
+    "label",
+    "n",
+    "mean_raw_baseline",
+    "mean_reprompt",
+    "mean_cross",
+    "delta_rep_vs_raw",
+    "p_rep_vs_raw",
+    "p_wilcoxon_rep_vs_raw",
+    "dz_rep_vs_raw",
+    "delta_cross_vs_raw",
+    "p_cross_vs_raw",
+    "p_t_cross_vs_raw",
+    "p_wilcoxon_cross_vs_raw",
+    "dz_cross_vs_raw",
+    "pct_change",
+    "t_stat",
+    "cohens_d",
+    "pct_improved",
+    "sample_hash",
+]
 
 
 def analyse_group(group_prefix: str, run_id: str = "") -> None:
@@ -558,12 +901,25 @@ def analyse_group(group_prefix: str, run_id: str = "") -> None:
     print(f"  Output: {output_dir}")
     print(f"{'═' * 60}")
 
-    all_results = []
+    all_results: list[dict] = []
+    comp_by_tag: dict[str, pd.DataFrame] = {}
+    nlp_by_tag: dict[str, dict] = {}
+    nlp_errors_by_tag: dict[str, str] = {}
+    nlp_backends_by_tag: dict[str, dict[str, str]] = {}
+    excluded_variants: dict[str, str] = {}
     all_taste_dfs: dict[str, pd.DataFrame] = {}
     all_kendall_dfs: dict[str, pd.DataFrame] = {}
+
     for tag in sorted(tags):
         try:
-            result = analyse_single(tag, output_dir)
+            result, comp_df, nlp_summary, nlp_error, nlp_backends = analyse_single(tag, output_dir)
+            comp_by_tag[tag] = comp_df
+            if nlp_summary is not None:
+                nlp_by_tag[tag] = nlp_summary
+            if nlp_error:
+                nlp_errors_by_tag[tag] = nlp_error
+            if nlp_backends:
+                nlp_backends_by_tag[tag] = nlp_backends
             if result:
                 all_results.append(result)
             # load taste & kendall CSVs that were just saved
@@ -573,33 +929,165 @@ def analyse_group(group_prefix: str, run_id: str = "") -> None:
                 all_taste_dfs[tag] = pd.read_csv(tb)
             if kd.exists():
                 all_kendall_dfs[tag] = pd.read_csv(kd)
-        except FileNotFoundError as e:
-            print(f"  ⚠ Skipping {tag}: {e}", file=sys.stderr)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"  ⚠ Excluyendo {tag}: {e}", file=sys.stderr)
+            excluded_variants[tag] = str(e)
 
-    # Cross-variant comparison
-    if len(all_results) > 1:
+    # Resolve sample_hash from sample_manifest.json or analysed prompt IDs
+    sample_hash = ""
+    manifest_path = output_dir / "sample_manifest.json"
+    if manifest_path.exists():
+        try:
+            manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+            sample_hash = str(manifest_data.get("sha1") or manifest_data.get("sample_hash") or "")
+        except Exception:
+            sample_hash = ""
+    if not sample_hash and comp_by_tag:
+        first_comp = next(iter(comp_by_tag.values()))
+        sample_hash = compute_sample_hash(first_comp["id_prompt"].tolist())
+
+    if sample_hash:
+        print(f"  Sample hash (SHA-1): {sample_hash}")
+    for r in all_results:
+        r["sample_hash"] = sample_hash
+
+    # Check backend consistency across variants
+    backend_mismatch_msg = ""
+    non_empty_backends = {t: b for t, b in nlp_backends_by_tag.items() if b}
+    if len(non_empty_backends) > 1:
+        unique_configs = {tuple(sorted(b.items())) for b in non_empty_backends.values()}
+        if len(unique_configs) > 1:
+            parts = [
+                f"`{_short_tag(t).split()[0]}`={b}"
+                for t, b in non_empty_backends.items()
+            ]
+            backend_mismatch_msg = "; ".join(parts)
+
+    # Summary CSV (even for 1 valid variant)
+    if all_results:
+        summary_df = pd.DataFrame(all_results)
+        for col in SUMMARY_COLUMNS:
+            if col not in summary_df.columns:
+                summary_df[col] = np.nan
+        summary_df = summary_df[SUMMARY_COLUMNS].round(4)
         print(f"\n{'#' * 60}")
-        print(f"  COMPARACIÓN ENTRE VARIANTES — {group_prefix}")
+        print(f"  RESUMEN DE VARIANTES — {group_prefix}")
         print(f"{'#' * 60}")
-
-        summary_df = pd.DataFrame(all_results)[
-            ["label", "n", "mean_raw", "mean_reprompt", "mean_diff", "pct_change",
-             "t_stat", "p_value", "cohens_d", "pct_improved"]
-        ].round(4)
         print(summary_df.to_string(index=False))
         summary_df.to_csv(output_dir / f"summary_{group_prefix}.csv", index=False)
+
+    # Cross-variant comparison
+    omnibus_cross: dict = {}
+    pair_cross_df = pd.DataFrame()
+    omnibus_rep: dict = {}
+    pair_rep_df = pd.DataFrame()
+    pair_nlp_df = pd.DataFrame()
+    if len(all_results) > 1:
+        omnibus_rep, pair_rep_df = compare_variants_on_column(
+            comp_by_tag, group_prefix, col="clap_score_reprompt"
+        )
+        if not pair_rep_df.empty:
+            print("\n  Contrastes entre variantes sobre CLAP(reprompt, audio_reprompt) [Holm]:")
+            if "friedman_p" in omnibus_rep:
+                print(
+                    f"  Friedman χ²={omnibus_rep['friedman_chi2']:.3f}, "
+                    f"p={omnibus_rep['friedman_p']:.4f}, W={omnibus_rep['kendall_w']:.4f}"
+                )
+            print(
+                pair_rep_df[
+                    ["pair", "mean_a", "mean_b", "mean_diff", "p_t", "p_t_holm", "p_wilcoxon", "p_w_holm", "cohens_dz"]
+                ].to_string(index=False)
+            )
+            pair_rep_df.to_csv(output_dir / f"pairwise_reprompt_{group_prefix}.csv", index=False)
+
+        omnibus_cross, pair_cross_df = compare_variants_on_cross(comp_by_tag, group_prefix)
+        if not pair_cross_df.empty:
+            print("\n  Contrastes entre variantes sobre CLAP(prompt_original, audio_reprompt) [Holm]:")
+            if "friedman_p" in omnibus_cross:
+                print(
+                    f"  Friedman χ²={omnibus_cross['friedman_chi2']:.3f}, "
+                    f"p={omnibus_cross['friedman_p']:.4f}, W={omnibus_cross['kendall_w']:.4f}"
+                )
+            print(
+                pair_cross_df[
+                    ["pair", "mean_a", "mean_b", "mean_diff", "p_t", "p_t_holm", "p_wilcoxon", "p_w_holm", "cohens_dz"]
+                ].to_string(index=False)
+            )
+            pair_cross_df.to_csv(output_dir / f"pairwise_cross_{group_prefix}.csv", index=False)
+
+        # Export combined CLAP + NLP summary and pairwise NLP diversity comparisons
+        if nlp_by_tag:
+            nlp_rows_summary = []
+            for r in all_results:
+                tag = r["label"]
+                ns = nlp_by_tag.get(tag, {})
+                nlp_rows_summary.append(
+                    {
+                        "variant": _short_tag(tag).split()[0],
+                        "label": tag,
+                        "clap_reprompt": r["mean_reprompt"],
+                        "clap_raw_baseline": r["mean_raw_baseline"],
+                        "clap_cross": r.get("mean_cross", np.nan),
+                        "has_true_raw_audio": r.get("has_true_raw_audio", False),
+                        "words_rep": ns.get("long_rep", np.nan),
+                        "ttr": ns.get("ttr", np.nan),
+                        "mattr": ns.get("mattr", np.nan),
+                        "bigram_entropy": ns.get("entropia", np.nan),
+                        "flesch": ns.get("flesch", np.nan),
+                        "musical_vocab_density": ns.get("musical_vocab_density", np.nan),
+                        "semantic_cos": ns.get("coseno", np.nan),
+                        "corpus_distinct_1": ns.get("corpus_distinct_1", np.nan),
+                        "corpus_distinct_2": ns.get("corpus_distinct_2", np.nan),
+                        "inter_prompt_cos_dist": ns.get("inter_prompt_cos_dist", np.nan),
+                        "self_bleu": ns.get("self_bleu", np.nan),
+                    }
+                )
+            pd.DataFrame(nlp_rows_summary).round(4).to_csv(
+                output_dir / f"summary_nlp_{group_prefix}.csv", index=False
+            )
+
+            nlp_pair_frames = []
+            for metric_col in (
+                "mattr",
+                "distinctiveness_cos_dist",
+                "musical_vocab_density",
+                "semantic_sim_raw_rep",
+            ):
+                _, m_df = compare_variants_on_column(comp_by_tag, group_prefix, col=metric_col)
+                if not m_df.empty:
+                    m_df.insert(0, "metric", metric_col)
+                    nlp_pair_frames.append(m_df)
+            if nlp_pair_frames:
+                pair_nlp_df = pd.concat(nlp_pair_frames, ignore_index=True)
+                pair_nlp_df.to_csv(output_dir / f"pairwise_nlp_{group_prefix}.csv", index=False)
 
         plot_comparison_across_variants(all_results, output_dir, group_prefix)
 
     # Generate findings markdown
     _generate_findings_report(
-        group_prefix, all_results, all_taste_dfs, all_kendall_dfs, output_dir
+        group_prefix,
+        all_results,
+        all_taste_dfs,
+        all_kendall_dfs,
+        output_dir,
+        omnibus=omnibus_cross,
+        pair_df=pair_cross_df,
+        omnibus_rep=omnibus_rep,
+        pair_rep_df=pair_rep_df,
+        nlp_by_tag=nlp_by_tag,
+        pair_nlp_df=pair_nlp_df,
+        sample_hash=sample_hash,
+        excluded_variants=excluded_variants,
+        nlp_errors_by_tag=nlp_errors_by_tag,
+        backend_mismatch_msg=backend_mismatch_msg,
     )
 
     print(f"\n  ✓ Análisis completo. Resultados en: {output_dir}")
 
 
 def _significance_label(p: float) -> str:
+    if pd.isna(p):
+        return "—"
     if p < 0.001:
         return "***"
     if p < 0.01:
@@ -607,6 +1095,12 @@ def _significance_label(p: float) -> str:
     if p < 0.05:
         return "*"
     return "n.s."
+
+
+def _fmt_num(val: float | object, fmt: str = ".4f") -> str:
+    if val is None or pd.isna(val):
+        return "—"
+    return format(float(val), fmt)
 
 
 def _short_tag(tag: str) -> str:
@@ -623,58 +1117,246 @@ def _generate_findings_report(
     taste_dfs: dict[str, pd.DataFrame],
     kendall_dfs: dict[str, pd.DataFrame],
     output_dir: Path,
+    omnibus: dict | None = None,
+    pair_df: pd.DataFrame | None = None,
+    omnibus_rep: dict | None = None,
+    pair_rep_df: pd.DataFrame | None = None,
+    nlp_by_tag: dict[str, dict] | None = None,
+    pair_nlp_df: pd.DataFrame | None = None,
+    sample_hash: str = "",
+    excluded_variants: dict[str, str] | None = None,
+    nlp_errors_by_tag: dict[str, str] | None = None,
+    backend_mismatch_msg: str = "",
 ) -> None:
     """Generate a hallazgos_<group>.md report with structured findings."""
     lines: list[str] = []
     w = lines.append
 
-    w(f"# {group} — Hallazgos de la Ablación\n")
-    w(f"> Generado automáticamente por `models/ablation_analysis.py`\n")
-
-    # ── 1. General stats ─────────────────────────────────────
+    w(f"# {group} — Hallazgos de la Ablación (CLAP + Diversidad NLP)\n")
+    w("> Generado automáticamente por `models/ablation_analysis.py`")
+    if sample_hash:
+        w(f"> Sample hash (SHA-1): `{sample_hash}`")
     if results:
-        w("## 1. Estadísticas Generales\n")
-        w("| Métrica | " + " | ".join(_short_tag(r["label"]) for r in results) + " |")
-        w("|---------|" + "|".join("---" for _ in results) + "|")
-        w("| n | " + " | ".join(str(r["n"]) for r in results) + " |")
-        w("| Media raw prompt | " + " | ".join(f"{r['mean_raw']:.4f}" for r in results) + " |")
-        w("| Media reprompt | " + " | ".join(f"{r['mean_reprompt']:.4f}" for r in results) + " |")
+        w(f"> Variantes analizadas: {', '.join(_short_tag(r['label']).split()[0] for r in results)}\n")
+    else:
+        w("> Variantes analizadas: *(ninguna)*\n")
+
+    if nlp_errors_by_tag or backend_mismatch_msg:
+        w("> [!WARNING]")
+        if nlp_errors_by_tag:
+            err_items = "; ".join(f"`{t}`: {msg}" for t, msg in nlp_errors_by_tag.items())
+            w(f"> **Evaluación NLP incompleta o fallida**: {err_items}")
+        if backend_mismatch_msg:
+            w(f"> **Backends NLP inconsistentes entre variantes**: {backend_mismatch_msg}")
+        w("")
+
+    if excluded_variants:
+        w("## Variantes excluidas\n")
+        w("| Variante / Tag | Motivo |")
+        w("|---|---|")
+        for ex_tag, reason in excluded_variants.items():
+            w(f"| `{ex_tag}` | {reason} |")
+        w("\n---\n")
+
+    # ── 0. Joint CLAP + NLP Decision Matrix ──────────────────
+    if results:
+        w("## 0. Matriz de Decisión Conjunta — CLAP + Diversidad NLP\n")
         w(
-            "| Diferencia media | "
-            + " | ".join(f"+{r['mean_diff']:.4f} ({r['pct_change']:+.1f}%)" for r in results)
+            "| Variante | CLAP(reprompt, audio_rep) | CLAP(prompt, audio_prompt) [_raw] | "
+            "CLAP(prompt, audio_rep) [_cross] | MATTR-15 | Distinct-1 | Distinct-2 | Self-BLEU-4 ↓ | "
+            "Dist. Coseno ↑ | Vocab. Musical | Cos(raw, rep) |"
+        )
+        w("|---|---|---|---|---|---|---|---|---|---|---|")
+        for r in results:
+            tag = r["label"]
+            ns = (nlp_by_tag or {}).get(tag)
+            nlp_err = (nlp_errors_by_tag or {}).get(tag)
+            v_short = _short_tag(tag).split()[0]
+            raw_cell = _fmt_num(r.get("mean_raw_baseline", r.get("mean_raw")))
+            cross_cell = _fmt_num(r.get("mean_cross"))
+            if ns is not None and not nlp_err:
+                mattr_c = _fmt_num(ns.get("mattr"), ".3f")
+                d1_c = _fmt_num(ns.get("corpus_distinct_1"), ".3f")
+                d2_c = _fmt_num(ns.get("corpus_distinct_2"), ".3f")
+                sb_c = _fmt_num(ns.get("self_bleu"), ".3f")
+                cd_c = _fmt_num(ns.get("inter_prompt_cos_dist"), ".3f")
+                mus_val = ns.get("musical_vocab_density", np.nan)
+                mus_c = f"{float(mus_val) * 100:.1f}%" if pd.notna(mus_val) else "—"
+                cos_c = _fmt_num(ns.get("coseno"), ".3f")
+            else:
+                reason = nlp_err or "sin datos NLP"
+                fail_cell = f"— (NLP falló: {reason})"
+                mattr_c = d1_c = d2_c = sb_c = cd_c = mus_c = cos_c = fail_cell
+            w(
+                f"| **{v_short}** | **{_fmt_num(r['mean_reprompt'])}** | {raw_cell} | "
+                f"{cross_cell} | {mattr_c} | {d1_c} | {d2_c} | {sb_c} | "
+                f"{cd_c} | {mus_c} | {cos_c} |"
+            )
+        w(
+            "\n> **Regla de decisión conjunta**: Seleccionar la variante que maximice "
+            "`CLAP(reprompt, audio_reprompt)` (fidelidad música↔reprompt superior al baseline "
+            "`CLAP(prompt, audio_prompt)`) y mantenga alta diversidad inter-prompt "
+            "(`Distinct-2`, `Dist. Coseno Inter-Prompt`, bajo `Self-BLEU-4`) sin degradar "
+            "`CLAP(prompt, audio_reprompt)`.\n"
+        )
+        w("\n---\n")
+
+    # ── 1A. Cross-variant comparison on CLAP(reprompt, reprompt_audio) ──
+    if pair_rep_df is not None and not pair_rep_df.empty:
+        w("## 1A. Comparación entre Variantes — CLAP(reprompt ↔ audio del reprompt)\n")
+        if omnibus_rep and "friedman_p" in omnibus_rep:
+            w(
+                f"- **Test omnibus (Friedman, n={omnibus_rep['n']})**: "
+                f"χ² = {omnibus_rep['friedman_chi2']:.3f}, p = {omnibus_rep['friedman_p']:.4f} "
+                f"({_significance_label(omnibus_rep['friedman_p'])}), Kendall W = {omnibus_rep['kendall_w']:.4f}\n"
+            )
+        w("| Par | Media A | Media B | Δ (A − B) | t | p (t) | p_Holm (t) | p_Holm (Wilcoxon) | d_z |")
+        w("|-----|---------|---------|-----------|---|-------|------------|-------------------|-----|")
+        for _, r in pair_rep_df.iterrows():
+            sig = _significance_label(r["p_t_holm"])
+            w(
+                f"| {r['pair']} | {_fmt_num(r['mean_a'])} | {_fmt_num(r['mean_b'])} | {_fmt_num(r['mean_diff'], '+.4f')} | "
+                f"{_fmt_num(r['t_stat'])} | {_fmt_num(r['p_t'])} | **{_fmt_num(r['p_t_holm'])}** {sig} | "
+                f"{_fmt_num(r['p_w_holm'])} | {_fmt_num(r['cohens_dz'])} |"
+            )
+        sig_rep_pairs = pair_rep_df[pair_rep_df["p_t_holm"] < 0.05]["pair"].tolist()
+        if sig_rep_pairs:
+            w(f"\n**Hallazgo en fidelidad al reprompt**: Diferencias significativas tras Holm en: {', '.join(sig_rep_pairs)}.\n")
+        else:
+            w("\n**Hallazgo en fidelidad al reprompt**: Ningún par difiere significativamente tras corrección de Holm (p_Holm ≥ 0.05).\n")
+        w("\n---\n")
+
+    # ── 1B. Cross-variant comparison on CLAP(original_prompt, reprompt_audio) ──
+    if pair_df is not None and not pair_df.empty:
+        w("## 1B. Comparación entre Variantes — CLAP(prompt original ↔ audio del reprompt)\n")
+        if omnibus and "friedman_p" in omnibus:
+            w(
+                f"- **Test omnibus (Friedman, n={omnibus['n']})**: "
+                f"χ² = {omnibus['friedman_chi2']:.3f}, p = {omnibus['friedman_p']:.4f} "
+                f"({_significance_label(omnibus['friedman_p'])}), Kendall W = {omnibus['kendall_w']:.4f}\n"
+            )
+        w("| Par | Media A | Media B | Δ (A − B) | t | p (t) | p_Holm (t) | p_Holm (Wilcoxon) | d_z |")
+        w("|-----|---------|---------|-----------|---|-------|------------|-------------------|-----|")
+        for _, r in pair_df.iterrows():
+            sig = _significance_label(r["p_t_holm"])
+            w(
+                f"| {r['pair']} | {_fmt_num(r['mean_a'])} | {_fmt_num(r['mean_b'])} | {_fmt_num(r['mean_diff'], '+.4f')} | "
+                f"{_fmt_num(r['t_stat'])} | {_fmt_num(r['p_t'])} | **{_fmt_num(r['p_t_holm'])}** {sig} | "
+                f"{_fmt_num(r['p_w_holm'])} | {_fmt_num(r['cohens_dz'])} |"
+            )
+        sig_pairs = pair_df[pair_df["p_t_holm"] < 0.05]["pair"].tolist()
+        if sig_pairs:
+            w(f"\n**Hallazgo entre variantes**: Diferencias significativas tras Holm en: {', '.join(sig_pairs)}.\n")
+        else:
+            w("\n**Hallazgo entre variantes**: Ningún par difiere significativamente tras corrección de Holm (p_Holm ≥ 0.05).\n")
+        w("\n---\n")
+
+    # ── 1C. Cross-variant comparison on Row-Level NLP Diversity Metrics ──
+    if pair_nlp_df is not None and not pair_nlp_df.empty:
+        w("## 1C. Contrastes Pareados en Diversidad y Estructura NLP [Holm]\n")
+        w("| Métrica | Par | Media A | Media B | Δ (A − B) | p_Holm (t) | p_Holm (Wilcoxon) | d_z |")
+        w("|---------|-----|---------|---------|-----------|------------|-------------------|-----|")
+        for _, r in pair_nlp_df.iterrows():
+            sig = _significance_label(r["p_t_holm"])
+            w(
+                f"| `{r['metric']}` | {r['pair']} | {_fmt_num(r['mean_a'])} | {_fmt_num(r['mean_b'])} | "
+                f"{_fmt_num(r['mean_diff'], '+.4f')} | **{_fmt_num(r['p_t_holm'])}** {sig} | "
+                f"{_fmt_num(r['p_w_holm'])} | {_fmt_num(r['cohens_dz'])} |"
+            )
+        w("\n---\n")
+
+    # ── 2. General stats (within-variant vs baseline raw) ────────
+    if results:
+        w("## 2. Estadísticas por Variante\n")
+        headers = " | ".join(_short_tag(r["label"]) for r in results)
+        sep = "|".join("---" for _ in results)
+
+        w("### 2A. reprompt vs baseline (texto y audio distintos)\n")
+        w(f"| Métrica | {headers} |")
+        w(f"|---------|{sep}|")
+        w("| n | " + " | ".join(str(r["n"]) for r in results) + " |")
+        w("| Media baseline raw | " + " | ".join(_fmt_num(r["mean_raw_baseline"]) for r in results) + " |")
+        w("| Media reprompt | " + " | ".join(_fmt_num(r["mean_reprompt"]) for r in results) + " |")
+        w(
+            "| Δ (reprompt − raw) | "
+            + " | ".join(f"{_fmt_num(r['delta_rep_vs_raw'], '+.4f')} ({r['pct_change']:+.1f}%)" for r in results)
             + " |"
         )
-        w("| Estadístico t | " + " | ".join(f"{r['t_stat']:.4f}" for r in results) + " |")
+        w("| Estadístico t | " + " | ".join(_fmt_num(r["t_stat"]) for r in results) + " |")
         w(
-            "| Valor p | "
+            "| p (t) | "
             + " | ".join(
-                f"**{r['p_value']:.4f}** {_significance_label(r['p_value'])}"
+                f"**{_fmt_num(r['p_rep_vs_raw'])}** {_significance_label(r['p_rep_vs_raw'])}"
                 for r in results
             )
             + " |"
         )
-        w("| Cohen's d | " + " | ".join(f"**{r['cohens_d']:.4f}**" for r in results) + " |")
+        w(
+            "| p (Wilcoxon) | "
+            + " | ".join(
+                f"{_fmt_num(r['p_wilcoxon_rep_vs_raw'])} {_significance_label(r['p_wilcoxon_rep_vs_raw'])}"
+                for r in results
+            )
+            + " |"
+        )
+        w("| d_z pareado | " + " | ".join(f"**{_fmt_num(r['dz_rep_vs_raw'])}**" for r in results) + " |")
+        w("| Cohen's d | " + " | ".join(_fmt_num(r["cohens_d"]) for r in results) + " |")
         w(
             "| Casos que mejoraron | "
             + " | ".join(f"{r['pct_improved']:.1f}%" for r in results)
             + " |"
         )
 
-        # interpretation
-        all_sig = all(r["p_value"] < 0.05 for r in results)
-        if all_sig:
-            best = max(results, key=lambda r: r["cohens_d"])
-            w(
-                f"\n**Hallazgo**: Todas las variantes presentan mejora **estadísticamente significativa** "
-                f"(p < 0.05) con tamaño del efecto grande (d > 1.0). "
-                f"La variante con mayor efecto es {_short_tag(best['label'])} "
-                f"(d = {best['cohens_d']:.2f}).\n"
+        sig = [r for r in results if pd.notna(r["p_rep_vs_raw"]) and r["p_rep_vs_raw"] < 0.05]
+        best = max(results, key=lambda r: r["dz_rep_vs_raw"])
+        w(
+            f"\n**Hallazgo (reprompt vs baseline)**: {len(sig)} de {len(results)} variantes con mejora significativa "
+            f"(p < 0.05, sin corrección por comparaciones múltiples). "
+            f"Mayor efecto: {_short_tag(best['label'])} (d_z = {best['dz_rep_vs_raw']:.2f}, Cohen's d = {best['cohens_d']:.2f}).\n"
+        )
+
+        w("\n### 2B. cross vs baseline (mismo texto)\n")
+        w(f"| Métrica | {headers} |")
+        w(f"|---------|{sep}|")
+        w("| n | " + " | ".join(str(r["n"]) for r in results) + " |")
+        w("| Media baseline raw | " + " | ".join(_fmt_num(r["mean_raw_baseline"]) for r in results) + " |")
+        w("| Media cross | " + " | ".join(_fmt_num(r.get("mean_cross")) for r in results) + " |")
+        w(
+            "| Δ (cross − raw) | "
+            + " | ".join(_fmt_num(r.get("delta_cross_vs_raw"), "+.4f") for r in results)
+            + " |"
+        )
+        w("| Estadístico t | " + " | ".join(_fmt_num(r.get("t_stat_cross")) for r in results) + " |")
+        w(
+            "| p (t) | "
+            + " | ".join(
+                f"{_fmt_num(r.get('p_t_cross_vs_raw'))} {_significance_label(r.get('p_t_cross_vs_raw'))}"
+                for r in results
             )
+            + " |"
+        )
+        w(
+            "| p (Wilcoxon) | "
+            + " | ".join(
+                f"**{_fmt_num(r.get('p_wilcoxon_cross_vs_raw'))}** {_significance_label(r.get('p_wilcoxon_cross_vs_raw'))}"
+                for r in results
+            )
+            + " |"
+        )
+        w("| d_z pareado | " + " | ".join(f"**{_fmt_num(r.get('dz_cross_vs_raw'))}**" for r in results) + " |")
+        w(
+            "| Casos que mejoraron | "
+            + " | ".join(
+                f"{r['pct_improved_cross']:.1f}%" if pd.notna(r.get("pct_improved_cross")) else "—"
+                for r in results
+            )
+            + " |"
+        )
         w("\n---\n")
 
-    # ── 2. Per-taste breakdown ───────────────────────────────
+    # ── 3. Per-taste breakdown ───────────────────────────────
     if taste_dfs:
-        w("## 2. Análisis por Categoría de Taste\n")
+        w("## 3. Análisis por Categoría de Taste\n")
         for tag, tdf in taste_dfs.items():
             w(f"### {_short_tag(tag)}\n")
             w("| Taste | N | Raw μ | Reprompt μ | Δ μ | Cambio % | p-value | Mejoraron |")
@@ -704,9 +1386,9 @@ def _generate_findings_report(
             )
         w("\n---\n")
 
-    # ── 3. Kendall correlations ──────────────────────────────
+    # ── 4. Kendall correlations ──────────────────────────────
     if kendall_dfs:
-        w("## 3. Correlación Kendall τ por Taste\n")
+        w("## 4. Correlación Kendall τ por Taste\n")
         # Build a combined table
         tastes_all = sorted(
             {t for kdf in kendall_dfs.values() for t in kdf["Taste"]}
