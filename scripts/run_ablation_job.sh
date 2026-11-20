@@ -41,7 +41,7 @@ set -Eeuo pipefail
 
 ORIG_ARGS=("$@")
 
-EXPERIMENT="B2"
+EXPERIMENT="${EXPERIMENT:-B2}"
 SAMPLE_SIZE="${SAMPLE_SIZE:-}"
 SEED="${SEED:-}"
 VARIANTS="${VARIANTS:-}"
@@ -99,7 +99,13 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -e | --experiment) EXPERIMENT="$2"; shift 2 ;;
+    -e | --experiment)
+      # Support unique systemd instance names like B2_20261120T140000Z_12345
+      # when EXPERIMENT wasn't already set via EnvironmentFile, or strip the
+      # queue suffix if passed directly as the unit instance (%i).
+      EXPERIMENT="${EXPERIMENT_OVERRIDE:-${2%%_*}}"
+      shift 2
+      ;;
     -s | --sample-size) SAMPLE_SIZE="$2"; shift 2 ;;
     --seed) SEED="$2"; shift 2 ;;
     --variants) VARIANTS="$2"; shift 2 ;;
