@@ -1,0 +1,275 @@
+{
+  "crossmodal_food_queries": [
+    {
+      "id": "cf_01",
+      "query_text": "chocolate cake",
+      "description": "Sweet, rich dessert with warm associations",
+      "expected_relevant_dimensions": ["taste", "emotion", "texture", "color"],
+      "expected_descriptors": {
+        "taste": ["sweet"],
+        "emotion": ["happiness", "pleasure", "nostalgic"],
+        "texture": ["moist", "soft", "creamy"],
+        "color": ["brown"],
+        "temperature": ["warm", "hot"]
+      }
+    },
+    {
+      "id": "cf_02",
+      "query_text": "lemon",
+      "description": "Citrus fruit with sour taste and bright color",
+      "expected_relevant_dimensions": ["taste", "color", "chemical_flavor"],
+      "expected_descriptors": {
+        "taste": ["sour"],
+        "color": ["yellow"],
+        "chemical_flavor": ["citrus", "acidic", "tangy"],
+        "texture": ["juicy"],
+        "emotion": ["refreshing"]
+      }
+    },
+    {
+      "id": "cf_03",
+      "query_text": "black coffee",
+      "description": "Bitter hot beverage with aromatic profile",
+      "expected_relevant_dimensions": ["taste", "temperature", "chemical_flavor"],
+      "expected_descriptors": {
+        "taste": ["bitter"],
+        "temperature": ["hot"],
+        "chemical_flavor": ["roasted", "earthy", "pungent"],
+        "color": ["brown", "black"],
+        "emotion": ["alertness", "warmth"]
+      }
+    },
+    {
+      "id": "cf_04",
+      "query_text": "vanilla ice cream",
+      "description": "Sweet cold creamy dessert",
+      "expected_relevant_dimensions": ["taste", "temperature", "texture"],
+      "expected_descriptors": {
+        "taste": ["sweet"],
+        "temperature": ["cold"],
+        "texture": ["creamy", "smooth"],
+        "color": ["white"],
+        "emotion": ["happiness", "pleasure", "surprise"]
+      }
+    },
+    {
+      "id": "cf_05",
+      "query_text": "cider vinegar",
+      "description": "Sour acidic condiment",
+      "expected_relevant_dimensions": ["taste", "chemical_flavor"],
+      "expected_descriptors": {
+        "taste": ["sour"],
+        "chemical_flavor": ["acetic", "pungent", "sharp"],
+        "texture": ["thin", "watery"],
+        "emotion": ["disgust", "tingling"],
+        "color": ["brown"]
+      }
+    },
+    {
+      "id": "cf_06",
+      "query_text": "granola bar",
+      "description": "Sweet crunchy snack with nutty profile",
+      "expected_relevant_dimensions": ["taste", "texture", "emotion"],
+      "expected_descriptors": {
+        "taste": ["sweet"],
+        "texture": ["crunchy", "chewy", "grainy"],
+        "chemical_flavor": ["nutty", "fruity"],
+        "emotion": ["nostalgic", "energy boost", "satiety"],
+        "color": ["brown"]
+      }
+    },
+    {
+      "id": "cf_07",
+      "query_text": "grapefruit slice",
+      "description": "Bitter citrus fruit",
+      "expected_relevant_dimensions": ["taste", "chemical_flavor", "color"],
+      "expected_descriptors": {
+        "taste": ["bitter", "sour"],
+        "chemical_flavor": ["citrus", "tangy"],
+        "color": ["pink", "yellow"],
+        "texture": ["juicy"],
+        "emotion": ["contempt"]
+      }
+    },
+    {
+      "id": "cf_08",
+      "query_text": "kale salad",
+      "description": "Bitter green vegetable dish",
+      "expected_relevant_dimensions": ["taste", "color", "texture"],
+      "expected_descriptors": {
+        "taste": ["bitter"],
+        "color": ["green"],
+        "texture": ["leafy", "crunchy", "fibrous"],
+        "chemical_flavor": ["earthy", "herbaceous"],
+        "emotion": ["health"]
+      }
+    },
+    {
+      "id": "cf_09",
+      "query_text": "caramel popcorn",
+      "description": "Sweet crunchy snack with buttery flavor",
+      "expected_relevant_dimensions": ["taste", "texture", "emotion"],
+      "expected_descriptors": {
+        "taste": ["sweet"],
+        "texture": ["crunchy", "sticky"],
+        "chemical_flavor": ["buttery", "caramel"],
+        "emotion": ["happiness", "fear", "surprise"],
+        "color": ["golden", "brown"]
+      }
+    },
+    {
+      "id": "cf_10",
+      "query_text": "bitter melon stir-fry",
+      "description": "Bitter cooked vegetable dish",
+      "expected_relevant_dimensions": ["taste", "temperature", "texture"],
+      "expected_descriptors": {
+        "taste": ["bitter"],
+        "temperature": ["hot"],
+        "texture": ["firm", "crunchy"],
+        "chemical_flavor": ["pungent", "earthy"],
+        "emotion": ["disgust"],
+        "color": ["green"]
+      }
+    },
+    {
+      "id": "cf_11",
+      "query_text": "strawberry donut",
+      "description": "Sweet fruity pastry",
+      "expected_relevant_dimensions": ["taste", "texture", "color"],
+      "expected_descriptors": {
+        "taste": ["sweet"],
+        "texture": ["soft", "fluffy", "glazed"],
+        "color": ["pink", "red"],
+        "chemical_flavor": ["fruity"],
+        "emotion": ["happiness", "anger"]
+      }
+    },
+    {
+      "id": "cf_12",
+      "query_text": "matcha latte",
+      "description": "Bitter-sweet warm green tea beverage",
+      "expected_relevant_dimensions": ["taste", "temperature", "color"],
+      "expected_descriptors": {
+        "taste": ["bitter"],
+        "temperature": ["hot", "warm"],
+        "color": ["green"],
+        "texture": ["creamy", "smooth"],
+        "chemical_flavor": ["earthy", "herbaceous"],
+        "emotion": ["happiness", "calm"]
+      }
+    },
+    {
+      "id": "cf_13",
+      "query_text": "sports drink",
+      "description": "Sweet cold refreshing beverage",
+      "expected_relevant_dimensions": ["taste", "temperature", "texture"],
+      "expected_descriptors": {
+        "taste": ["sweet"],
+        "temperature": ["cold"],
+        "texture": ["smooth", "refreshing", "watery"],
+        "color": ["blue"],
+        "emotion": ["happiness"]
+      }
+    },
+    {
+      "id": "cf_14",
+      "query_text": "cuttlefish cooked",
+      "description": "Savory briny seafood",
+      "expected_relevant_dimensions": ["taste", "texture", "chemical_flavor"],
+      "expected_descriptors": {
+        "taste": ["savory"],
+        "chemical_flavor": ["umami", "briny", "earthy"],
+        "texture": ["firm", "tender", "chewy"],
+        "temperature": ["hot"],
+        "emotion": ["satisfaction", "warmth"],
+        "color": ["brown"]
+      }
+    },
+    {
+      "id": "cf_15",
+      "query_text": "honey glazed bun",
+      "description": "Sweet warm bread with honey coating",
+      "expected_relevant_dimensions": ["taste", "texture", "chemical_flavor"],
+      "expected_descriptors": {
+        "taste": ["sweet"],
+        "texture": ["soft", "sticky", "glazed"],
+        "chemical_flavor": ["floral", "buttery"],
+        "temperature": ["warm"],
+        "emotion": ["nostalgic", "contempt"],
+        "color": ["golden"]
+      }
+    }
+  ],
+  "audio_caption_queries": [
+    {
+      "id": "ac_01",
+      "query_text": "sweet melody happiness warm brown",
+      "description": "Derived from chocolate cake crossmodal descriptors",
+      "expected_relevant_captions": ["gentle melody", "warm music", "soft piano", "calm instrumental"],
+      "expected_irrelevant_themes": ["loud noise", "heavy bass", "distortion", "crash"]
+    },
+    {
+      "id": "ac_02",
+      "query_text": "sour citrus yellow refreshing",
+      "description": "Derived from lemon crossmodal descriptors",
+      "expected_relevant_captions": ["bright sounds", "light music", "upbeat melody", "cheerful tune"],
+      "expected_irrelevant_themes": ["deep bass", "dark ambient", "heavy metal", "thunder"]
+    },
+    {
+      "id": "ac_03",
+      "query_text": "bitter roasted hot earthy",
+      "description": "Derived from black coffee crossmodal descriptors",
+      "expected_relevant_captions": ["dark tone", "deep sounds", "moody", "ambient"],
+      "expected_irrelevant_themes": ["childlike", "playful", "squeaky", "cheerful pop"]
+    },
+    {
+      "id": "ac_04",
+      "query_text": "sweet cold creamy smooth white",
+      "description": "Derived from vanilla ice cream crossmodal descriptors",
+      "expected_relevant_captions": ["smooth melody", "soft sound", "gentle", "cool"],
+      "expected_irrelevant_themes": ["harsh noise", "screaming", "distortion", "grinding"]
+    },
+    {
+      "id": "ac_05",
+      "query_text": "crunchy chewy nutty sweet nostalgic",
+      "description": "Derived from granola bar crossmodal descriptors",
+      "expected_relevant_captions": ["acoustic", "folk", "rhythmic", "warm sound"],
+      "expected_irrelevant_themes": ["electronic", "synthetic", "glitch", "industrial"]
+    },
+    {
+      "id": "ac_06",
+      "query_text": "savory umami briny tender warm satisfaction",
+      "description": "Derived from cuttlefish crossmodal descriptors",
+      "expected_relevant_captions": ["deep melody", "warm bass", "rich tone", "smooth groove"],
+      "expected_irrelevant_themes": ["high pitched", "sharp", "piercing", "screeching"]
+    },
+    {
+      "id": "ac_07",
+      "query_text": "bitter earthy green herbaceous crunchy",
+      "description": "Derived from kale salad crossmodal descriptors",
+      "expected_relevant_captions": ["natural sound", "organic", "acoustic guitar", "folk tune"],
+      "expected_irrelevant_themes": ["electronic beat", "techno", "synthetic bass", "robot voice"]
+    },
+    {
+      "id": "ac_08",
+      "query_text": "sweet sticky crunchy golden happiness",
+      "description": "Derived from caramel popcorn crossmodal descriptors",
+      "expected_relevant_captions": ["upbeat rhythm", "fun", "playful melody", "bright sound"],
+      "expected_irrelevant_themes": ["sad piano", "funeral march", "dark ambient", "droning"]
+    },
+    {
+      "id": "ac_09",
+      "query_text": "sour pungent sharp thin disgust",
+      "description": "Derived from vinegar crossmodal descriptors",
+      "expected_relevant_captions": ["sharp sound", "piercing", "high frequency", "stinging"],
+      "expected_irrelevant_themes": ["soft lullaby", "gentle harp", "peaceful", "serene"]
+    },
+    {
+      "id": "ac_10",
+      "query_text": "sweet soft warm floral nostalgic",
+      "description": "Derived from honey glazed bun crossmodal descriptors",
+      "expected_relevant_captions": ["warm melody", "nostalgic tune", "soft instrumental", "gentle piano"],
+      "expected_irrelevant_themes": ["aggressive drums", "metal guitar", "harsh beat", "screaming"]
+    }
+  ]
+}

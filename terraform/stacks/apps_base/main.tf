@@ -18,8 +18,40 @@ module "project_secrets_manager" {
   db_port     = module.project_rds_db.port    # RDS host port, e.g., "5432"
   db_name     = module.project_rds_db.db_name # RDS database name
 
+  kaggle_secret_name  = var.runner_kaggle_secret_name != "" ? var.runner_kaggle_secret_name : "kaggle-ablation-credentials"
+  kaggle_username     = var.kaggle_username
+  kaggle_key          = var.kaggle_key
+  git_ssh_secret_name = var.runner_git_ssh_secret_name != "" ? var.runner_git_ssh_secret_name : "git-ssh-ablation-deploy-key"
+  git_ssh_private_key = var.git_ssh_private_key
+  llm_secret_name     = var.runner_llm_secret_name != "" ? var.runner_llm_secret_name : "llm-ablation-api-keys"
+  openai_api_key      = var.openai_api_key
+  openai_base_url     = var.openai_base_url
+
   # Explicit dependency to ensure RDS is fully created before Secrets Manager tries to read its outputs
   depends_on = [
     module.project_rds_db
   ]
 }
+
+module "ec2_runner" {
+  count         = var.enable_ec2_runner ? 1 : 0
+  source        = "../../modules/ec2_runner"
+  secret_arn    = module.project_secrets_manager.secret_arn
+  instance_type = var.runner_instance_type
+  owner         = var.owner
+
+  git_branch          = var.runner_git_branch
+  kaggle_secret_name  = module.project_secrets_manager.kaggle_secret_name != "" ? module.project_secrets_manager.kaggle_secret_name : var.runner_kaggle_secret_name
+  git_ssh_secret_name = module.project_secrets_manager.git_ssh_secret_name != "" ? module.project_secrets_manager.git_ssh_secret_name : var.runner_git_ssh_secret_name
+  llm_secret_name     = module.project_secrets_manager.llm_secret_name != "" ? module.project_secrets_manager.llm_secret_name : var.runner_llm_secret_name
+  additional_secret_arns = compact([
+    module.project_secrets_manager.kaggle_secret_arn,
+    module.project_secrets_manager.git_ssh_secret_arn,
+    module.project_secrets_manager.llm_secret_arn,
+  ])
+
+  depends_on = [
+    module.project_secrets_manager
+  ]
+}
+

@@ -1,3 +1,1 @@
-stages:
-  music-gen-baseline:
-    cmd: python models/scripts/GenMusicSpanio.py
+stages: {}

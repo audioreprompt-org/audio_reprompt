@@ -1,5 +1,5 @@
 region                         = "us-east-1"
-owner                          = "4AI"
+owner                          = "ablations-team"
 
 db_publicly_accessible   = true
 sg_ingress_cidr_blocks   = ["0.0.0.0/0"]

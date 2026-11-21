@@ -34,7 +34,7 @@ resource "aws_security_group" "rds_sg" {
 resource "aws_db_instance" "mi_rds_postgres" {
   allocated_storage      = var.db_allocated_storage_gib
   engine                 = "postgres"
-  engine_version         = "17.4"        # Convierta esta línea a una variable si es necesario
+  engine_version         = "17.11"        # Convierta esta línea a una variable si es necesario
   instance_class         = "db.t3.micro" # Convierta esta línea a una variable si es necesario
   db_name                = var.db_name
   username               = var.db_username

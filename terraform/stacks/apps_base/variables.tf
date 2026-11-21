@@ -46,3 +46,73 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "enable_ec2_runner" {
+  description = "Desplegar VM EC2 para ejecuciones desatendidas (on-demand)"
+  type        = bool
+  default     = false
+}
+
+variable "runner_instance_type" {
+  description = "Tipo de instancia EC2 para el runner"
+  type        = string
+  default     = "t3.xlarge"
+}
+
+variable "runner_git_branch" {
+  description = "Rama que el runner ejecuta y donde publica resultados"
+  type        = string
+  default     = "ablations-experiments"
+}
+
+variable "runner_kaggle_secret_name" {
+  description = "Secreto de Secrets Manager con credenciales de Kaggle ({\"username\",\"key\"})"
+  type        = string
+  default     = ""
+}
+
+variable "runner_git_ssh_secret_name" {
+  description = "Secreto de Secrets Manager con la deploy key de GitHub (escritura) para publicar resultados"
+  type        = string
+  default     = ""
+}
+
+variable "runner_llm_secret_name" {
+  description = "Secreto de Secrets Manager con las API keys de LLM (OPENAI_API_KEY, OPENAI_BASE_URL)"
+  type        = string
+  default     = ""
+}
+
+variable "kaggle_username" {
+  description = "Usuario de Kaggle para almacenar en Secrets Manager"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "kaggle_key" {
+  description = "API Key de Kaggle para almacenar en Secrets Manager"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "git_ssh_private_key" {
+  description = "Clave privada SSH (deploy key) para publicar resultados en GitHub"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "openai_api_key" {
+  description = "API Key de OpenAI / compatible endpoint para almacenar en Secrets Manager"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "openai_base_url" {
+  description = "URL base opcional para el cliente OpenAI"
+  type        = string
+  default     = ""
+}
